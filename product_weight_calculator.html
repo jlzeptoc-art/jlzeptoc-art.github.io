@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Weight Calculator</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; }
+  .card { max-width: 520px; padding: 1.25rem; border: 1px solid #ddd; border-radius: 8px; }
+  label { display:block; margin-top: 0.75rem; font-weight: 600; }
+  input, select { width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:6px; }
+  .row { display:flex; gap: 0.75rem; }
+  .row > div { flex:1; }
+  .result { margin-top: 1rem; padding: 0.75rem; background: #f7f7f7; border-radius:6px; }
+  .muted { color:#666; font-size: 0.9rem; }
+  .note { font-size: 0.85rem; color:#444; margin-top:0.5rem; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>Product Weight Calculator (lbs)</h2>
+    <div class="row">
+      <div>
+        <label for="ounces">Fluid Ounces</label>
+        <input id="ounces" type="number" step="0.001" min="0" value="128">
+      </div>
+      <div>
+        <label for="spg">Specific Gravity (SPG)</label>
+        <input id="spg" type="number" step="0.001" min="0" value="1.000">
+      </div>
+    </div>
+    <label for="bottle">Bottle Type</label>
+    <select id="bottle"></select>
+    <div class="note muted">Assumption: 1 gallon @ SPG 1.000 = 8.34 lb net. Gross = net + tare.</div>
+    <div class="result" id="result"></div>
+  </div>
+
+<script>
+const GALLON_LBS_AT_SPG1 = 8.34;
+const bottleTypes = [
+  { key: "gallon_white_natural", name: "Gallon (White/Natural HDPE)", tare: 0.30, nominalOz: 128 },
+  { key: "gallon_clear", name: "Gallon (Clear/PET)", tare: 0.32, nominalOz: 128 },
+  { key: "half_gallon", name: "Half Gallon (64 oz)", tare: 0.16, nominalOz: 64 },
+  { key: "quart", name: "Quart (32 oz)", tare: 0.08, nominalOz: 32 },
+  { key: "pint", name: "Pint (16 oz)", tare: 0.05, nominalOz: 16 },
+  { key: "8oz", name: "Bottle (8 oz)", tare: 0.03, nominalOz: 8 },
+  { key: "4oz", name: "Bottle (4 oz)", tare: 0.02, nominalOz: 4 },
+  { key: "drum_5gal", name: "5 Gallon Pail", tare: 1.80, nominalOz: 640 }
+];
+
+function fillBottleSelect() {
+  const sel = document.getElementById('bottle');
+  sel.innerHTML = "";
+  bottleTypes.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b.key;
+    const cap = b.nominalOz ? ` – ${b.nominalOz} oz` : "";
+    opt.textContent = `${b.name}${cap} (tare ${b.tare.toFixed(3)} lb)`;
+    sel.appendChild(opt);
+  });
+}
+
+function calc() {
+  const ounces = parseFloat(document.getElementById('ounces').value || "0");
+  const spg = parseFloat(document.getElementById('spg').value || "0");
+  const key = document.getElementById('bottle').value;
+  const bottle = bottleTypes.find(b => b.key === key) || bottleTypes[0];
+
+  const net = (ounces * spg * GALLON_LBS_AT_SPG1) / 128.0;
+  const gross = net + bottle.tare;
+
+  const res = document.getElementById('result');
+  res.innerHTML = `
+    <div><strong>Net:</strong> ${net.toFixed(3)} lb</div>
+    <div><strong>Gross:</strong> ${gross.toFixed(3)} lb</div>
+    <div class="muted">Bottle tare: ${bottle.tare.toFixed(3)} lb • Ounces: ${ounces.toFixed(3)} • SPG: ${spg.toFixed(3)}</div>
+  `;
+}
+
+fillBottleSelect();
+['ounces','spg','bottle'].forEach(id => {
+  document.getElementById(id).addEventListener('input', calc);
+  document.getElementById(id).addEventListener('change', calc);
+});
+calc();
+</script>
+</body>
+</html>
