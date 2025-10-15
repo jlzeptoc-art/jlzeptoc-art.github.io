@@ -134,7 +134,7 @@ function ingestRows(rows) {
     out.push({ pn, name, spg });
   }
   PRODUCTS = out;
-  setLoadStatus(`Loaded ${PRODUCTS.length} products from XLSX.`, 'ok');
+  setLoadStatus(`Loaded ${PRODUCTS.length} products from SG Sheet.`, 'ok');
 }
 
 /* ---------- XLSX loader (from fixed URL) ---------- */
