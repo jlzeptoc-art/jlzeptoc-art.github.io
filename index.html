@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Product Weight Calculator</title>
+  <!-- SheetJS for XLSX parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root{--b:#ddd;--m:#666;--bg:#f7f7f7}
@@ -11,7 +12,7 @@
     .card{max-width:780px;padding:1.25rem;border:1px solid var(--b);border-radius:10px}
     h2{margin:0 0 .75rem 0}
     label{display:block;margin-top:.75rem;font-weight:600}
-    input,select,button{width:100%;padding:.7rem;border:1px solid #ccc;border-radius:8px;font-size:1rem}
+    input,select{width:100%;padding:.7rem;border:1px solid #ccc;border-radius:8px;font-size:1rem}
     .row{display:flex;gap:.8rem;flex-wrap:wrap}
     .row>div{flex:1;min-width:220px}
     .muted{color:var(--m);font-size:.92rem}
@@ -20,39 +21,19 @@
     .ok{color:#155724;background:#d4edda;border-color:#c3e6cb}
     .warn{color:#856404;background:#fff3cd;border-color:#ffeeba}
     .err{color:#721c24;background:#f8d7da;border-color:#f5c6cb}
-    button{cursor:pointer;background:#f4f4f4}
-    button:hover{background:#eee}
-    .drop{margin-top:.5rem;border:2px dashed var(--b);border-radius:8px;padding:.9rem;text-align:center;background:#fafafa}
-    .drop.drag{background:#f0f7ff;border-color:#99c7ff}
-    code{background:#f3f3f3;padding:.1rem .3rem;border-radius:4px}
   </style>
 </head>
 <body>
   <div class="card">
     <h2>Product Weight Calculator</h2>
     <div class="muted">
+      Source: locked to maintainer’s XLSX. Read-only. Updates require pushing a new spreadsheet to the repo.<br>
       Assumption: 1 gallon @ SPG 1.000 = <strong>8.34 lb</strong> (128 fl oz).<br>
       Net = (bottle_ounces × SPG × 8.34 / 128). Gross = Net + tare.
     </div>
 
-    <!-- Data source controls -->
-    <div class="row" style="margin-top:.75rem;align-items:flex-end;">
-      <div>
-        <label for="dataSource">Data source (XLSX URL)</label>
-        <input id="dataSource" type="url" placeholder="https://raw.githubusercontent.com/<user>/<repo>/main/SPECIFIC%20GRAVITY.xlsx">
-        <div class="muted">Point to your master .xlsx (GitHub raw, OneDrive <code>?download=1</code>, or Google Sheets Excel export).</div>
-      </div>
-      <div style="max-width:11rem">
-        <button id="reloadBtn" type="button">Reload from URL</button>
-      </div>
-    </div>
+    <div id="loadStatus" class="muted" style="margin-top:.5rem;"></div>
 
-    <label for="xlsx">Or load a local .xlsx file</label>
-    <input id="xlsx" type="file" accept=".xlsx,.xls">
-    <div id="dropzone" class="drop">Drag & drop your .xlsx here</div>
-    <div id="loadStatus" class="muted" style="margin-top:.25rem;"></div>
-
-    <!-- Search + bottle/SPG -->
     <label for="search" style="margin-top:1rem">Search Product Number (formula)</label>
     <input id="search" type="text" placeholder="Type product number and press Enter">
     <div id="searchStatus" class="muted" style="margin-top:.25rem;"></div>
@@ -65,7 +46,7 @@
       <div>
         <label for="spg">Specific Gravity (SPG)</label>
         <input id="spg" type="number" step="0.001" min="0" value="1.000">
-        <div class="muted">Auto-fills when a product is found. You can override.</div>
+        <div class="muted">Auto-fills on match. You can override.</div>
       </div>
     </div>
 
@@ -73,26 +54,29 @@
   </div>
 
 <script>
+/* ---------- CONFIG: single authoritative source ---------- */
+const DATA_URL = "https://raw.githubusercontent.com/jlzeptoc-art/jlzeptoc-art.github.io/main/SPECIFIC%20GRAVITY.xlsx";
+
+/* ---------- Constants ---------- */
 const GALLON_LBS_AT_SPG1 = 8.34;
 
-// Bottle catalog (ounces + tare). Edit if you have exact tares.
+/* Bottle catalog (ounces + tare). Update if you have exact tares. */
 const bottleTypes = [
-  { key: "gallon_white_natural", name: "Gallon (White/Natural HDPE)", tare: 0.30, ounces: 128 },
-  { key: "gallon_clear",         name: "Gallon (Clear/PET)",          tare: 0.32, ounces: 128 },
-  { key: "half_gallon",          name: "Half Gallon",                  tare: 0.16, ounces: 64 },
-  { key: "quart",                name: "Quart",                        tare: 0.08, ounces: 32 },
+  { key: "gallon_white_natural", name: "Gallon (White/Natural)", tare: 0.30, ounces: 128 },
+  { key: "gallon_fstyle",         name: "Gallon (F-Style)",          tare: 0.32, ounces: 128 },
+  { key: "half_gallon",          name: "Half Gallon",                  tare: 0.24, ounces: 64 },
+  { key: "quart",                name: "Quart",                        tare: 0.14, ounces: 32 },
   { key: "pint",                 name: "Pint",                         tare: 0.05, ounces: 16 },
   { key: "8oz",                  name: "Bottle (8 oz)",                tare: 0.03, ounces: 8 },
   { key: "4oz",                  name: "Bottle (4 oz)",                tare: 0.02, ounces: 4 },
-  { key: "drum_5gal",            name: "5 Gallon Pail",                tare: 1.80, ounces: 640 }
+  { key: "pail_5gal",            name: "5 Gallon Pail",                tare: 1.80, ounces: 640 }
 ];
 
-// ===== STATE =====
+/* ---------- State ---------- */
 let PRODUCTS = []; // { pn, name, spg }
-let XLSX_URL = ""; // persisted in localStorage
 const $ = (id) => document.getElementById(id);
 
-// ===== UI helpers =====
+/* ---------- UI helpers ---------- */
 function setStatus(msg, kind='') {
   const s = $('searchStatus'); if (!s) return;
   s.textContent = msg || '';
@@ -115,7 +99,7 @@ function fillBottleSelect() {
   });
 }
 
-// ===== Header picking / normalization =====
+/* ---------- Header picking / normalization ---------- */
 const norm = (s) => String(s ?? '').trim().toLowerCase();
 function pickHeader(objKeys, regexList) {
   const lower = objKeys.map(k => ({ orig: k, low: norm(k) }));
@@ -127,7 +111,7 @@ function pickHeader(objKeys, regexList) {
   return null;
 }
 
-// ===== Ingest rows (supports: formula, description, specific gravity) =====
+/* ---------- Ingest rows (formula, description, specific gravity) ---------- */
 function ingestRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     setLoadStatus('No rows found in sheet.', 'err'); PRODUCTS = []; return;
@@ -151,36 +135,16 @@ function ingestRows(rows) {
     out.push({ pn, name, spg });
   }
   PRODUCTS = out;
-  setLoadStatus(`Loaded ${PRODUCTS.length} products.`, 'ok');
+  setLoadStatus(`Loaded ${PRODUCTS.length} products from XLSX.`, 'ok');
 }
 
-// ===== XLSX loaders =====
-function loadXLSXFile(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, { type: 'array' });
-      if (!wb.SheetNames?.length) throw new Error('No sheets found');
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-      ingestRows(rows);
-    } catch (err) {
-      setLoadStatus(`XLSX parse error: ${err.message}`, 'err'); PRODUCTS = [];
-    }
-  };
-  reader.onerror = () => setLoadStatus('Failed to read file.', 'err');
-  reader.readAsArrayBuffer(file);
-}
-
+/* ---------- XLSX loader (from fixed URL) ---------- */
 async function fetchArrayBuffer(url) {
   const resp = await fetch(url, { cache: 'no-store' });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return await resp.arrayBuffer();
 }
 async function loadFromURL(url) {
-  if (!url) { setLoadStatus('Enter an XLSX URL.', 'warn'); return; }
   setLoadStatus('Loading spreadsheet…');
   try {
     const ab = await fetchArrayBuffer(url);
@@ -190,11 +154,13 @@ async function loadFromURL(url) {
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
     ingestRows(rows);
   } catch (err) {
-    setLoadStatus(`Load failed: ${err.message}`, 'err'); PRODUCTS = [];
+    // Common issues: wrong URL (use RAW), CORS blocked if using non-raw, private repo.
+    setLoadStatus(`Load failed: ${err.message}. Ensure you use the RAW URL and the repo is public.`, 'err');
+    PRODUCTS = [];
   }
 }
 
-// ===== Search & calc =====
+/* ---------- Search & calc ---------- */
 function findProduct(pnRaw) {
   const key = norm(pnRaw);
   if (!key) return null;
@@ -203,7 +169,7 @@ function findProduct(pnRaw) {
 
 function lookupProduct() {
   const query = $('search').value;
-  if (!PRODUCTS.length) { setStatus('No product list loaded. Upload or reload from URL.', 'warn'); return; }
+  if (!PRODUCTS.length) { setStatus('Data not loaded yet. Check status above.', 'warn'); return; }
   if (!query.trim())    { setStatus('Enter a product number to search.', ''); return; }
   const rec = findProduct(query);
   if (rec) {
@@ -233,38 +199,11 @@ function calc(rec=null) {
   `;
 }
 
-// ===== Wire up =====
-document.addEventListener('DOMContentLoaded', () => {
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', async () => {
   fillBottleSelect();
   calc();
-
-  // Persist URL
-  const saved = localStorage.getItem('product_xlsx_url');
-  if (saved) { XLSX_URL = saved; $('dataSource').value = saved; }
-
-  $('reloadBtn').addEventListener('click', async () => {
-    XLSX_URL = $('dataSource').value.trim();
-    if (!XLSX_URL) { setLoadStatus('Enter a valid XLSX URL.', 'warn'); return; }
-    localStorage.setItem('product_xlsx_url', XLSX_URL);
-    await loadFromURL(XLSX_URL);
-  });
-
-  // Local file
-  $('xlsx').addEventListener('change', (e) => {
-    const f = e.target.files && e.target.files[0];
-    if (f) loadXLSXFile(f);
-  });
-
-  // Drag & drop
-  const dz = $('dropzone');
-  ;['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, (e)=>{e.preventDefault(); dz.classList.add('drag');}));
-  ;['dragleave','drop'].forEach(ev => dz.addEventListener(ev, (e)=>{e.preventDefault(); dz.classList.remove('drag');}));
-  dz.addEventListener('drop', (e) => {
-    const f = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f) loadXLSXFile(f);
-  });
-
-  // Search + calc
+  await loadFromURL(DATA_URL);
   $('search').addEventListener('change', lookupProduct);
   $('search').addEventListener('keyup', (e) => { if (e.key === 'Enter') lookupProduct(); });
   ['spg','bottle'].forEach(id => {
