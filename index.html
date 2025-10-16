@@ -7,20 +7,40 @@
   <!-- SheetJS for XLSX parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
-    :root{--b:#ddd;--m:#666;--bg:#f7f7f7}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:2rem}
-    .card{max-width:780px;padding:1.25rem;border:1px solid var(--b);border-radius:10px}
-    h2{margin:0 0 .75rem 0}
-    label{display:block;margin-top:.75rem;font-weight:600}
-    input,select{width:100%;padding:.7rem;border:1px solid #ccc;border-radius:8px;font-size:1rem}
-    .row{display:flex;gap:.8rem;flex-wrap:wrap}
-    .row>div{flex:1;min-width:220px}
-    .muted{color:var(--m);font-size:.92rem}
-    .result{margin-top:1rem;padding:.9rem;background:var(--bg);border-radius:8px}
-    .pill{display:inline-block;padding:.2rem .5rem;border:1px solid var(--b);border-radius:999px;margin-top:.35rem;font-size:.85rem}
-    .ok{color:#155724;background:#d4edda;border-color:#c3e6cb}
-    .warn{color:#856404;background:#fff3cd;border-color:#ffeeba}
-    .err{color:#721c24;background:#f8d7da;border-color:#f5c6cb}
+:root{--b:#ddd;--m:#666;--bg:#f7f7f7}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:2rem;background:#fafafa}
+
+/* Card layout */
+.card{max-width:860px;margin:0 auto;padding:1.25rem 1.5rem;border:1px solid var(--b);border-radius:12px;background:#fff;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+h2{margin:0 0 .75rem 0}
+
+/* Typography and form controls */
+label{display:block;margin-top:.75rem;font-weight:600}
+input,select{width:100%;padding:.7rem;border:1px solid #ccc;border-radius:8px;font-size:1rem;background:#fff}
+
+/* Simple layout rows */
+.row{display:flex;gap:.8rem;flex-wrap:wrap}
+.row>div{flex:1;min-width:220px}
+
+/* Status and result styling */
+.muted{color:var(--m);font-size:.92rem}
+.result{margin-top:1rem;padding:.9rem;background:var(--bg);border-radius:8px}
+.pill{display:inline-block;padding:.2rem .5rem;border:1px solid var(--b);border-radius:999px;margin-top:.35rem;font-size:.85rem}
+.ok{color:#155724;background:#d4edda;border-color:#c3e6cb}
+.warn{color:#856404;background:#fff3cd;border-color:#ffeeba}
+.err{color:#721c24;background:#f8d7da;border-color:#f5c6cb}
+
+/* Buttons */
+button{appearance:none;border:1px solid var(--b);border-radius:8px;padding:.55rem .9rem;font-size:.95rem;cursor:pointer;background:#fff}
+button.primary{border-color:#4a7ae6}
+.actions{display:flex;gap:.5rem;margin-top:.75rem}
+
+/* Suggestions dropdown */
+.suggestions{position:relative;margin-top:.25rem}
+.suggestions-list{position:absolute;z-index:10;left:0;right:0;background:#fff;border:1px solid var(--b);border-radius:8px;max-height:220px;overflow:auto;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.suggestions-item{padding:.55rem .75rem;cursor:pointer}
+.suggestions-item:hover{background:#f3f3f3}
+.suggestions-empty{padding:.5rem .75rem;color:var(--m)}
   </style>
 </head>
 <body>
@@ -34,9 +54,17 @@
 
     <div id="loadStatus" class="muted" style="margin-top:.5rem;"></div>
 
-    <label for="search" style="margin-top:1rem">Search Product Number (formula)</label>
-    <input id="search" type="text" placeholder="Type product number and press Enter">
+    <label for="search" style="margin-top:1rem">Search by Item Number (formula) or Product Name</label>
+    <div class="row">
+      <div style="flex:2;min-width:260px">
+        <input id="search" type="text" placeholder="Type item number or name; press Enter or click Search">
+      </div>
+      <div style="flex:0 0 auto;min-width:120px">
+        <button id="searchBtn" class="primary" style="width:100%">Search</button>
+      </div>
+    </div>
     <div id="searchStatus" class="muted" style="margin-top:.25rem;"></div>
+    <div id="suggestions" class="suggestions"></div>
 
     <div class="row" style="margin-top:.75rem;">
       <div>
@@ -51,6 +79,13 @@
     </div>
 
     <div id="result" class="result"></div>
+    <div class="actions">
+      <button id="resetBtn" title="Clear selections">Reset</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;">
+      <div class="muted" style="font-size:.9rem;">App made by <strong>J.L.</strong></div>
+      <img src="maintex-logo.jpg" alt="Maintex Logo" style="height:50px;opacity:0.9;">
+    </div>
   </div>
 
 <script>
@@ -167,18 +202,51 @@ function findProduct(pnRaw) {
   return PRODUCTS.find(r => norm(r.pn) === key) || null;
 }
 
+function findProductFlexible(qRaw){
+  const q = norm(qRaw);
+  if (!q) return null;
+  // exact item number
+  let hit = PRODUCTS.find(r => norm(r.pn) === q);
+  if (hit) return hit;
+  // exact name
+  hit = PRODUCTS.find(r => norm(r.name) === q);
+  if (hit) return hit;
+  // contains in pn or name
+  hit = PRODUCTS.find(r => norm(r.pn).includes(q) || norm(r.name).includes(q));
+  return hit || null;
+}
+
+function getSuggestions(qRaw, limit=8){
+  const q = norm(qRaw);
+  if (!q) return [];
+  const scored = PRODUCTS.map(r => {
+    const pn = norm(r.pn), nm = norm(r.name);
+    let score = 0;
+    if (pn.startsWith(q)) score += 3;
+    if (nm.startsWith(q)) score += 2;
+    if (pn.includes(q)) score += 1;
+    if (nm.includes(q)) score += 1;
+    return { r, score };
+  }).filter(x => x.score > 0);
+  scored.sort((a,b) => b.score - a.score);
+  return scored.slice(0, limit).map(x => x.r);
+}
+
 function lookupProduct() {
   const query = $('search').value;
   if (!PRODUCTS.length) { setStatus('Data not loaded yet. Check status above.', 'warn'); return; }
-  if (!query.trim())    { setStatus('Enter a product number to search.', ''); return; }
-  const rec = findProduct(query);
+  if (!query.trim())    { setStatus('Enter an item number or name to search.', ''); renderSuggestions([]); return; }
+  const rec = findProductFlexible(query);
   if (rec) {
     $('spg').value = String(rec.spg);
     const nameStr = rec.name ? ` • ${rec.name}` : '';
     setStatus(`Found ${rec.pn}${nameStr} → SPG ${Number(rec.spg).toFixed(3)}`, 'ok');
+    localStorage.setItem('pw_pn', rec.pn);
     calc(rec);
+    renderSuggestions([]);
   } else {
-    setStatus(`Product “${query}” not found. Type SPG manually.`, 'warn');
+    setStatus(`No exact match. Suggestions shown below…`, 'warn');
+    renderSuggestions(getSuggestions(query));
   }
 }
 
@@ -189,6 +257,9 @@ function calc(rec=null) {
   const net = (bottle.ounces * spg * GALLON_LBS_AT_SPG1) / 128.0;
   const gross = net + bottle.tare;
   const productName = rec?.name ? ` • ${rec.name}` : '';
+  localStorage.setItem('pw_bottle', bottle.key);
+  if (Number.isFinite(spg)) localStorage.setItem('pw_spg', String(spg));
+  if (rec?.pn) localStorage.setItem('pw_pn', rec.pn);
   $('result').innerHTML = `
     <div><strong>Net:</strong> ${Number.isFinite(net) ? net.toFixed(3) : '—'} lb</div>
     <div><strong>Gross:</strong> ${Number.isFinite(gross) ? gross.toFixed(3) : '—'} lb</div>
@@ -199,13 +270,70 @@ function calc(rec=null) {
   `;
 }
 
+function renderSuggestions(items){
+  const host = $('suggestions');
+  if (!host) return;
+  // Always hide the container first
+  host.style.display = 'none';
+  host.innerHTML = '';
+  if (!items || !items.length){
+    host.innerHTML = '<div class="suggestions-list"><div class="suggestions-empty">No suggestions</div></div>';
+    host.style.display = 'none';
+    return;
+  }
+  const list = document.createElement('div');
+  list.className = 'suggestions-list';
+  items.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'suggestions-item';
+    const nameStr = r.name ? ` • ${r.name}` : '';
+    div.textContent = `${r.pn}${nameStr} — SPG ${Number(r.spg).toFixed(3)}`;
+    div.addEventListener('click', () => {
+      $('search').value = r.pn; // prefer item number
+      renderSuggestions([]);
+      lookupProduct();
+    });
+    list.appendChild(div);
+  });
+  host.appendChild(list);
+  host.style.display = 'block';
+}
+
 /* ---------- Init ---------- */
 document.addEventListener('DOMContentLoaded', async () => {
   fillBottleSelect();
   calc();
   await loadFromURL(DATA_URL);
+
+  // Restore persisted selections
+  const savedBottle = localStorage.getItem('pw_bottle');
+  if (savedBottle && bottleTypes.some(b=>b.key===savedBottle)) { $('bottle').value = savedBottle; }
+  const savedSpg = parseFloat(localStorage.getItem('pw_spg')||'');
+  if (Number.isFinite(savedSpg)) { $('spg').value = String(savedSpg); }
+  const savedPn = localStorage.getItem('pw_pn');
+  if (savedPn) { $('search').value = savedPn; }
+  calc();
+
+  // Wire buttons
+  $('searchBtn').addEventListener('click', lookupProduct);
+  $('resetBtn').addEventListener('click', ()=>{
+    localStorage.removeItem('pw_bottle');
+    localStorage.removeItem('pw_spg');
+    localStorage.removeItem('pw_pn');
+    $('search').value = '';
+    $('spg').value = '1.000';
+    $('bottle').selectedIndex = 0;
+    PRODUCTS.length ? setStatus('Reset. Enter a product number or SPG.', '') : setLoadStatus('Reset.', '');
+    calc();
+  });
+
   $('search').addEventListener('change', lookupProduct);
   $('search').addEventListener('keyup', (e) => { if (e.key === 'Enter') lookupProduct(); });
+  $('search').addEventListener('input', (e) => {
+    const q = e.target.value;
+    if (!PRODUCTS.length || !q.trim()) { renderSuggestions([]); return; }
+    renderSuggestions(getSuggestions(q));
+  });
   ['spg','bottle'].forEach(id => {
     $(id).addEventListener('input', () => calc());
     $(id).addEventListener('change', () => calc());
