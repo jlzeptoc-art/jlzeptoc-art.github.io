@@ -45,9 +45,9 @@ button.primary{border-color:#4a7ae6}
 </head>
 <body>
   <div class="card">
-    <h2>Product Weight Calculator</h2>
+    <h2>Product Weight Calculator</h2> 
     <div class="muted">
-      Source: Specific Gravity Sheet by Lab. Last update: 10/15/25<br>
+      Source: Specific Gravity Sheet by Lab. Last update: 10/16/25<br>
       Assumption: 1 gallon @ SPG 1.000 = <strong>8.34 lb</strong> (128 fl oz).<br>
       Net = (bottle_ounces × SPG × 8.34 / 128). Gross = Net + tare.
     </div>
@@ -174,16 +174,12 @@ function ingestRows(rows) {
 }
 
 /* ---------- XLSX loader (from fixed URL) ---------- */
-  async function fetchArrayBuffer(url) {
-  const resp = await fetch(url, { cache: 'no-store' });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return await resp.arrayBuffer();
-}
-
-async function loadFromURL(url) {
+ async function loadFromURL(url) {
   setLoadStatus('Loading spreadsheet…');
   try {
-    const ab = await fetchArrayBuffer(url);
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const ab = await resp.arrayBuffer();
     const wb = XLSX.read(new Uint8Array(ab), { type: 'array' });
 
     if (!wb.SheetNames?.length) throw new Error('No sheets in workbook');
