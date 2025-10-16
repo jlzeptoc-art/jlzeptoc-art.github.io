@@ -174,26 +174,29 @@ function ingestRows(rows) {
 }
 
 /* ---------- XLSX loader (from fixed URL) ---------- */
-async function fetchArrayBuffer(url) {
-  const resp = await fetch(url, { cache: 'no-store' });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return await resp.arrayBuffer();
-}
 async function loadFromURL(url) {
   setLoadStatus('Loading spreadsheet…');
   try {
     const ab = await fetchArrayBuffer(url);
     const wb = XLSX.read(new Uint8Array(ab), { type: 'array' });
+
     if (!wb.SheetNames?.length) throw new Error('No sheets in workbook');
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
     ingestRows(rows);
+
+    // Extract the file name from URL (for display)
+    let fileName = url.split('/').pop().split('?')[0];
+    if (!fileName.endsWith('.xlsx')) fileName += '.xlsx';
+    setLoadStatus(`Loaded ${PRODUCTS.length} products from "${fileName}".`, 'ok');
+
   } catch (err) {
-    // Common issues: wrong URL (use RAW), CORS blocked if using non-raw, private repo.
-    setLoadStatus(`Load failed: ${err.message}. Ensure you use the RAW URL and the repo is public.`, 'err');
+    setLoadStatus(`Load failed: ${err.message}. Ensure the sheet is public and the link uses /export?format=xlsx.`, 'err');
     PRODUCTS = [];
   }
 }
+
 
 /* ---------- Search & calc ---------- */
 function findProduct(pnRaw) {
