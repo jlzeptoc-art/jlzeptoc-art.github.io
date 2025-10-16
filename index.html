@@ -174,11 +174,33 @@ function ingestRows(rows) {
 }
 
 /* ---------- XLSX loader (from fixed URL) ---------- */
+  function getFilenameFromHeaders(resp) {
+  const cd = resp.headers.get('content-disposition');
+  if (!cd) return null;
+  // patterns: filename="NAME.xlsx"  |  filename*=UTF-8''NAME.xlsx
+  const star = cd.match(/filename\*\s*=\s*[^']*''([^;]+)/i);
+  if (star && star[1]) return decodeURIComponent(star[1]).replace(/["]/g,'').trim();
+  const plain = cd.match(/filename\s*=\s*"([^"]+)"/i) || cd.match(/filename\s*=\s*([^;]+)/i);
+  if (plain && plain[1]) return plain[1].replace(/["]/g,'').trim();
+  return null;
+}
+
+function getTitleFromWorkbook(wb) {
+  // SheetJS populates Props.Title for many sources; fallback to first sheet name.
+  if (wb && wb.Props && wb.Props.Title) return String(wb.Props.Title).trim();
+  if (wb && Array.isArray(wb.SheetNames) && wb.SheetNames.length) return String(wb.SheetNames[0]).trim();
+  return null;
+}
+
  async function loadFromURL(url) {
   setLoadStatus('Loading spreadsheet…');
   try {
     const resp = await fetch(url, { cache: 'no-store' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    // Try to get a real filename from headers first
+    let fileName = getFilenameFromHeaders(resp);
+
     const ab = await resp.arrayBuffer();
     const wb = XLSX.read(new Uint8Array(ab), { type: 'array' });
 
@@ -188,9 +210,21 @@ function ingestRows(rows) {
 
     ingestRows(rows);
 
-    // Extract the file name from URL (for display)
-    let fileName = url.split('/').pop().split('?')[0];
-    if (!fileName.endsWith('.xlsx')) fileName += '.xlsx';
+    // If no header-derived filename, fall back to workbook metadata/sheet name
+    if (!fileName) {
+      const title = getTitleFromWorkbook(wb);
+      if (title) {
+        // Ensure it looks like a file name
+        fileName = title.endsWith('.xlsx') ? title : `${title}.xlsx`;
+      }
+    }
+
+    // Final fallback: last URL segment (your current behavior)
+    if (!fileName) {
+      fileName = url.split('/').pop().split('?')[0] || 'data.xlsx';
+      if (!/\.xlsx$/i.test(fileName)) fileName += '.xlsx';
+    }
+
     setLoadStatus(`Loaded ${PRODUCTS.length} products from "${fileName}".`, 'ok');
 
   } catch (err) {
@@ -198,6 +232,7 @@ function ingestRows(rows) {
     PRODUCTS = [];
   }
 }
+
 
 
 /* ---------- Search & calc ---------- */
