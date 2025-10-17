@@ -309,31 +309,49 @@ function calc(rec=null) {
   `;
 }
 
+function selectProductByPN(pnRaw) {
+  const key = (pnRaw ?? '').toString().trim().toLowerCase();
+  const rec = PRODUCTS.find(x => (x.pn ?? '').toString().trim().toLowerCase() === key);
+  if (!rec) { setStatus(`Item “${pnRaw}” not found.`, 'warn'); return; }
+  $('search').value = rec.pn;               // show the PN in the box
+  $('spg').value = String(rec.spg);         // set SPG
+  setStatus(`Found ${rec.pn}${rec.name ? ' • ' + rec.name : ''} → SPG ${Number(rec.spg).toFixed(3)}`, 'ok');
+  renderSuggestions([]);                    // hide suggestions
+  localStorage.setItem('pw_pn', rec.pn);    // persist
+  calc(rec);                                // compute with the exact record
+}
+
+
 function renderSuggestions(items){
   const host = $('suggestions');
   if (!host) return;
-  // Always hide the container first
   host.style.display = 'none';
   host.innerHTML = '';
+
   if (!items || !items.length){
-    host.innerHTML = '<div class="suggestions-list"><div class="suggestions-empty">No suggestions</div></div>';
-    host.style.display = 'none';
+    // keep empty hidden
     return;
   }
+
   const list = document.createElement('div');
   list.className = 'suggestions-list';
+
   items.forEach(r => {
     const div = document.createElement('div');
     div.className = 'suggestions-item';
     const nameStr = r.name ? ` • ${r.name}` : '';
     div.textContent = `${r.pn}${nameStr} — SPG ${Number(r.spg).toFixed(3)}`;
-    div.addEventListener('click', () => {
-      $('search').value = r.pn; // prefer item number
-      renderSuggestions([]);
-      lookupProduct();
+
+    // Use mousedown to beat input's key/blur handlers on mobile
+    div.addEventListener('mousedown', (e) => {
+      e.preventDefault();   // don't blur input / don't let other handlers interfere
+      e.stopPropagation();
+      selectProductByPN(r.pn);
     });
+
     list.appendChild(div);
   });
+
   host.appendChild(list);
   host.style.display = 'block';
 }
