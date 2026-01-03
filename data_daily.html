@@ -408,21 +408,60 @@ function formatScheduleDate(sheetName) {
   return sheetName;
 }
 
-// Find sheet matching today's date
+// Check if a sheet exists for a given date
+function sheetExistsForDate(names, month, day) {
+  const formats = [
+    `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`, // "01-03"
+    `${month}-${day}`, // "1-3"
+    `${String(month).padStart(2, '0')}-${day}`, // "01-3"
+    `${month}-${String(day).padStart(2, '0')}` // "1-03"
+  ];
+  
+  return names.find(s => {
+    const trimmed = s.trim();
+    return formats.some(format => 
+      trimmed === format || trimmed.startsWith(format)
+    );
+  });
+}
+
+// Find sheet matching today's date or next available workday
 function findTodaySheet(names) {
-  const todayFormat = getTodaySheetFormat();
-  // Try exact match first (e.g., "01-02")
-  let match = names.find(s => s.trim() === todayFormat);
-  if (match) return match;
-  // Try without leading zeros (e.g., "1-2")
-  const altFormat = todayFormat.replace(/^0+/, '').replace(/-0+/, '-');
-  match = names.find(s => s.trim() === altFormat);
-  if (match) return match;
-  // Try contains today's format
-  match = names.find(s => s.includes(todayFormat) || s.includes(altFormat));
-  if (match) return match;
-  // Fallback: find any sheet with date-like pattern
-  return names.find(s => /^\d{1,2}-\d{1,2}$/.test(s.trim())) || null;
+  const today = new Date();
+  let checkDate = new Date(today);
+  const maxDaysAhead = 14; // Look up to 2 weeks ahead
+  let daysChecked = 0;
+  
+  while (daysChecked < maxDaysAhead) {
+    const month = checkDate.getMonth() + 1;
+    const day = checkDate.getDate();
+    const dayOfWeek = checkDate.getDay(); // 0 = Sunday, 6 = Saturday
+    
+    // Skip weekends - if Saturday, jump to Monday; if Sunday, jump to Monday
+    if (dayOfWeek === 6) { // Saturday
+      checkDate.setDate(checkDate.getDate() + 2); // Jump to Monday
+      daysChecked += 2;
+      continue;
+    }
+    if (dayOfWeek === 0) { // Sunday
+      checkDate.setDate(checkDate.getDate() + 1); // Jump to Monday
+      daysChecked += 1;
+      continue;
+    }
+    
+    // Check if sheet exists for this date
+    const match = sheetExistsForDate(names, month, day);
+    if (match) {
+      return match;
+    }
+    
+    // Move to next day
+    checkDate.setDate(checkDate.getDate() + 1);
+    daysChecked++;
+  }
+  
+  // If no match found after checking ahead, return null
+  return null;
 }
 
 // Render clean table grouped by Line
@@ -615,9 +654,24 @@ function populateSheetSelects() {
     daySelect.appendChild(opt);
   }
 
-  // Auto-detect today's sheet
+  // Auto-detect today's sheet or next available workday
   const todaySheet = findTodaySheet(sheetNames);
-  daySelect.value = todaySheet || sheetNames[1] || sheetNames[0];
+  if (todaySheet) {
+    daySelect.value = todaySheet;
+    const today = new Date();
+    const todayFormat = getTodaySheetFormat();
+    const match = todaySheet.match(/(\d{1,2})-(\d{1,2})/);
+    if (match) {
+      const sheetDate = `${match[1]}-${match[2]}`;
+      if (sheetDate !== todayFormat) {
+        console.log(`Today's sheet (${todayFormat}) not found. Showing next available workday: ${todaySheet}`);
+      }
+    }
+  } else {
+    // If no workday found in next 2 weeks, select first sheet
+    daySelect.value = sheetNames[0] || sheetNames[1] || "";
+    console.log(`No workday sheets found. Showing first available sheet.`);
+  }
 }
 
 // Build clean table
