@@ -182,7 +182,6 @@
       <table id="cleanTable">
         <thead>
           <tr>
-            <th>Priority</th>
             <th>Description</th>
             <th>SKU#</th>
             <th>Ordered</th>
@@ -336,7 +335,7 @@ function renderCleanRows(rows) {
   const tbody = cleanTable.querySelector("tbody");
   tbody.innerHTML = "";
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">No schedule data found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">No schedule data found.</td></tr>';
     return;
   }
   
@@ -365,7 +364,7 @@ function renderCleanRows(rows) {
     const headerTr = document.createElement("tr");
     headerTr.className = "line-header";
     const headerTd = document.createElement("td");
-    headerTd.colSpan = 7;
+    headerTd.colSpan = 6;
     headerTd.textContent = line;
     headerTr.appendChild(headerTd);
     tbody.appendChild(headerTr);
@@ -374,7 +373,7 @@ function renderCleanRows(rows) {
     for (const row of lineRows) {
       const tr = document.createElement("tr");
       const cells = [
-        row.Priority, row.Description, row["SKU#"], row.Ordered,
+        row.Description, row["SKU#"], row.Ordered,
         row.Haz_Info, row["Bottle Label Location"], row["Box Label Location"]
       ];
       for (const v of cells) {
@@ -465,7 +464,6 @@ function extractDayRows(dayAoa) {
 
     rows.push({
       Line: currentLine,
-      Priority: priority,
       Description: safeStr(row[1]),
       "SKU#": sku,
       Ordered: parseNumber(row[3]) ?? safeStr(row[3]),
@@ -497,7 +495,6 @@ function buildCleanRows(dayRows) {
     
     return {
       Line: dr.Line,
-      Priority: dr.Priority,
       Description: dr.Description,
       "SKU#": dr["SKU#"],
       Ordered: dr.Ordered,
