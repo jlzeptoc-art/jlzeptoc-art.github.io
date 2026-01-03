@@ -142,18 +142,22 @@
     }
     .small{font-size:11px;color:var(--muted)}
     .printTitle{display:none}
+    .printHeader{display:none}
     @media print{
       header, .controls{display:none !important}
-      body{background:#fff;color:#000}
-      main{padding:0}
-      .panel{border:none; box-shadow:none; background:#fff}
-      table{background:#fff; min-width:0}
-      th{background:#f4f4f4;color:#000; border-bottom:1px solid #bbb}
-      td{border-bottom:1px solid #ddd}
-      .tableWrap{border:none}
-      .printTitle{display:block !important; margin:8px 0 10px 0; font-size:16px;}
-      .line-header{background:#e8e8e8 !important; color:#000 !important}
-      .line-header td{border-bottom:2px solid #999}
+      body{background:var(--bg);color:var(--text)}
+      main{padding:20px}
+      .panel{border:1px solid var(--border); box-shadow:none; background:rgba(17,26,51,.70)}
+      table{background:rgba(15,23,48,.65); min-width:0}
+      th{background:rgba(17,26,51,.95);color:var(--muted); border-bottom:1px solid rgba(255,255,255,.08)}
+      td{border-bottom:1px solid rgba(255,255,255,.08); color:var(--text)}
+      .tableWrap{border:1px solid var(--border)}
+      .printTitle{display:block !important; margin:0 0 12px 0; font-size:20px; font-weight:600; color:var(--text)}
+      .printHeader{display:flex !important; justify-content:space-between; align-items:center; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border)}
+      .printHeader .printDate{font-size:16px; color:var(--text); font-weight:500}
+      .printHeader .printShift{display:inline-flex; align-items:center; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:500; background:rgba(122,167,255,.2); border:1px solid rgba(122,167,255,.3); color:var(--accent)}
+      .line-header{background:rgba(122,167,255,.25) !important; color:var(--text) !important}
+      .line-header td{border-bottom:2px solid rgba(122,167,255,.4)}
     }
   </style>
 </head>
@@ -175,9 +179,15 @@
   </div>
 
   <div class="panel">
-    <h2 class="printTitle" id="printTitle" style="margin:0 0 10px 0; font-size:16px;">
-      Clean Production Schedule
-    </h2>
+    <div class="printHeader">
+      <div>
+        <h2 class="printTitle" id="printTitle" style="margin:0 0 4px 0; font-size:16px;">
+          Production Schedule
+        </h2>
+        <span class="printDate" id="printDate">—</span>
+      </div>
+      <span class="printShift" id="printShift">—</span>
+    </div>
     <div class="tableWrap">
       <table id="cleanTable">
         <thead>
@@ -541,8 +551,11 @@ function build() {
   
   scheduleDate.textContent = formattedDate;
   shiftBadge.textContent = shift;
+  
+  // Update print header
+  $("printDate").textContent = formattedDate;
+  $("printShift").textContent = shift;
 
-  $("printTitle").textContent = `Clean Production Schedule — ${dayName}`;
   renderCleanRows(cleanRows);
   btnPrint.disabled = cleanRows.length === 0;
 }
