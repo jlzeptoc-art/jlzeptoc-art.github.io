@@ -3,105 +3,122 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Production Schedule Cleaner (Single-File Web App)</title>
-
-  <!-- SheetJS (XLSX) via CDN -->
+  <title>Production Schedule</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
   <style>
     :root{
       --bg:#0b1020;
       --panel:#111a33;
-      --panel2:#0f1730;
       --text:#e8ecff;
       --muted:#a9b3d6;
       --accent:#7aa7ff;
       --border:rgba(255,255,255,.10);
       --good:#3ddc97;
       --warn:#ffcf5a;
-      --bad:#ff5a7a;
     }
     *{box-sizing:border-box}
     body{
       margin:0;
-      font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      font-family:ui-sans-serif, system-ui, -apple-system, sans-serif;
       background:linear-gradient(180deg, var(--bg), #070a16 70%);
       color:var(--text);
     }
     header{
-      padding:18px 20px;
+      padding:24px 32px;
       border-bottom:1px solid var(--border);
-      background:rgba(17,26,51,.72);
-      backdrop-filter: blur(8px);
+      background:rgba(17,26,51,.85);
+      backdrop-filter: blur(12px);
       position:sticky; top:0; z-index:10;
     }
+    .header-content{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:16px;
+    }
     header h1{
-      margin:0 0 6px 0; font-size:18px; letter-spacing:.2px;
+      margin:0; font-size:24px; font-weight:600; letter-spacing:-0.5px;
     }
-    header p{margin:0; color:var(--muted); font-size:13px}
-    main{padding:18px 20px 28px}
-    .grid{
-      display:grid;
-      grid-template-columns: 1.1fr .9fr;
-      gap:14px;
-      align-items:start;
+    .schedule-info{
+      display:flex;
+      align-items:center;
+      gap:16px;
+      flex-wrap:wrap;
     }
+    .schedule-date{
+      font-size:16px;
+      color:var(--text);
+      font-weight:500;
+    }
+    .shift-badge{
+      display:inline-flex;
+      align-items:center;
+      padding:6px 14px;
+      border-radius:20px;
+      font-size:13px;
+      font-weight:500;
+      background:rgba(122,167,255,.2);
+      border:1px solid rgba(122,167,255,.3);
+      color:var(--accent);
+    }
+    main{padding:24px 32px}
     .panel{
       background:rgba(17,26,51,.70);
       border:1px solid var(--border);
-      border-radius:14px;
-      padding:14px;
-      box-shadow: 0 18px 60px rgba(0,0,0,.35);
+      border-radius:16px;
+      padding:20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.2);
+      margin-bottom:20px;
     }
-    .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
-    .row + .row{margin-top:10px}
-    label{font-size:12px; color:var(--muted)}
-    input[type="file"], select, button, input[type="text"]{
+    .controls{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:16px;
+    }
+    select, button{
       border:1px solid var(--border);
       background:rgba(15,23,48,.85);
       color:var(--text);
-      border-radius:10px;
-      padding:10px 10px;
+      border-radius:12px;
+      padding:12px 16px;
       outline:none;
-      font-size:13px;
+      font-size:14px;
+      transition:all 0.2s ease;
     }
-    input[type="text"]{min-width:240px}
-    select{min-width:220px}
+    select{
+      min-width:220px;
+      cursor:pointer;
+    }
+    select:hover{
+      border-color:rgba(122,167,255,.4);
+    }
     button{
       cursor:pointer;
-      transition: transform .04s ease, border-color .15s ease;
+      font-weight:500;
       user-select:none;
+      border-color:rgba(255,207,90,.4);
+      background:rgba(255,207,90,.1);
     }
-    button:hover{border-color:rgba(122,167,255,.55)}
-    button:active{transform: translateY(1px)}
-    .btn-accent{border-color:rgba(122,167,255,.55)}
-    .btn-good{border-color:rgba(61,220,151,.55)}
-    .btn-warn{border-color:rgba(255,207,90,.55)}
-    .btn-bad{border-color:rgba(255,90,122,.55)}
-    .hint{font-size:12px;color:var(--muted);line-height:1.45}
-    .pill{
-      display:inline-flex; gap:8px; align-items:center;
-      border:1px solid var(--border);
-      background:rgba(15,23,48,.85);
-      border-radius:999px;
-      padding:7px 10px;
-      font-size:12px; color:var(--muted);
+    button:hover{
+      border-color:rgba(255,207,90,.6);
+      background:rgba(255,207,90,.15);
+      transform:translateY(-1px);
     }
-    .pill b{color:var(--text); font-weight:600}
-    .split{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap:14px;
-      margin-top:14px;
+    button:active{transform: translateY(0)}
+    button:disabled{
+      opacity:0.5;
+      cursor:not-allowed;
     }
-    .tableWrap{overflow:auto; border-radius:12px; border:1px solid var(--border)}
+    .tableWrap{overflow:auto; border-radius:12px; border:1px solid var(--border); margin-top:10px}
     table{border-collapse:collapse; width:100%; min-width:700px; background:rgba(15,23,48,.65)}
     th, td{
       border-bottom:1px solid rgba(255,255,255,.08);
       padding:9px 10px;
       text-align:left;
       font-size:12.5px;
-      vertical-align:top;
       white-space:nowrap;
     }
     th{
@@ -113,46 +130,20 @@
       letter-spacing:.2px;
     }
     tr:hover td{background:rgba(122,167,255,.07)}
-    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
-    .kpi{
-      display:grid;
-      grid-template-columns: repeat(4, minmax(0,1fr));
-      gap:10px;
-      margin-top:10px;
+    .line-header{
+      background:rgba(122,167,255,.25) !important;
+      font-weight:600;
+      color:var(--text) !important;
+      font-size:13px;
+      padding:12px 10px;
     }
-    .kpi .card{
-      border:1px solid var(--border);
-      background:rgba(15,23,48,.65);
-      border-radius:12px;
-      padding:10px;
+    .line-header td{
+      border-bottom:2px solid rgba(122,167,255,.4);
     }
-    .kpi .card .n{font-size:18px; font-weight:700}
-    .kpi .card .t{font-size:11px; color:var(--muted); margin-top:2px}
-    .status{
-      display:flex; gap:10px; flex-wrap:wrap; margin-top:10px
-    }
-    .status .msg{font-size:12px; color:var(--muted)}
-    .badge{
-      display:inline-flex; align-items:center; gap:8px;
-      padding:7px 10px; border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(15,23,48,.65);
-      font-size:12px;
-    }
-    .dot{width:9px;height:9px;border-radius:99px;background:var(--muted)}
-    .dot.good{background:var(--good)}
-    .dot.warn{background:var(--warn)}
-    .dot.bad{background:var(--bad)}
-    .rightCol .panel{position:sticky; top:86px}
     .small{font-size:11px;color:var(--muted)}
-    .muted{color:var(--muted)}
-    .warnText{color:var(--warn)}
-    .goodText{color:var(--good)}
-    .badText{color:var(--bad)}
-
-    /* Print only the clean table */
+    .printTitle{display:none}
     @media print{
-      header, .controls, .rightCol, .origPanel, .noPrint{display:none !important}
+      header, .controls{display:none !important}
       body{background:#fff;color:#000}
       main{padding:0}
       .panel{border:none; box-shadow:none; background:#fff}
@@ -160,228 +151,79 @@
       th{background:#f4f4f4;color:#000; border-bottom:1px solid #bbb}
       td{border-bottom:1px solid #ddd}
       .tableWrap{border:none}
-      .printTitle{display:block !important}
+      .printTitle{display:block !important; margin:8px 0 10px 0; font-size:16px;}
+      .line-header{background:#e8e8e8 !important; color:#000 !important}
+      .line-header td{border-bottom:2px solid #999}
     }
-    .printTitle{display:none}
   </style>
 </head>
-
 <body>
 <header>
-  <h1>Production Schedule Cleaner</h1>
-  <p>Upload an XLSX → pick a day sheet → generates a clean, printable/downloadable version with: Priority, Description, SKU#, Ordered, Haz_Info, Bottle Label Location, Box Label Location.</p>
+  <div class="header-content">
+    <h1>Production Schedule</h1>
+    <div class="schedule-info">
+      <span class="schedule-date" id="scheduleDate">—</span>
+      <span class="shift-badge" id="shiftBadge">—</span>
+    </div>
+  </div>
 </header>
 
 <main>
-  <div class="grid">
-    <div class="leftCol">
-      <div class="panel controls">
-        <div class="row">
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <label>Upload XLSX</label>
-            <input id="fileInput" type="file" accept=".xlsx,.xlsm,.xlsb,.xls" />
-          </div>
+  <div class="panel controls">
+    <select id="daySelect" disabled></select>
+    <button id="btnPrint" disabled>Print</button>
+  </div>
 
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <label>Source sheet (lookup)</label>
-            <select id="sourceSelect" disabled></select>
-            <div class="small">Auto-detected (looks for “source”); change if needed.</div>
-          </div>
-
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <label>Day sheet</label>
-            <select id="daySelect" disabled></select>
-            <div class="small">Pick a day tab (e.g., 01-02).</div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <label>Filter (Clean table)</label>
-            <input id="filterInput" type="text" placeholder="Search: sku, description, haz, locations..." disabled />
-          </div>
-
-          <button id="btnBuild" class="btn-accent" disabled>Build Clean Table</button>
-          <button id="btnPrint" class="btn-warn" disabled>Print Clean</button>
-          <button id="btnDownloadXlsx" class="btn-good" disabled>Download Clean XLSX</button>
-          <button id="btnDownloadCsv" disabled>Download CSV</button>
-        </div>
-
-        <div class="status">
-          <span class="badge" title="Workbook loaded?">
-            <span id="dotLoaded" class="dot"></span> Workbook <b id="loadedText">not loaded</b>
-          </span>
-          <span class="badge" title="Source join health">
-            <span id="dotJoin" class="dot"></span> Join <b id="joinText">n/a</b>
-          </span>
-          <span class="badge" title="Detected mapping for Source headers">
-            <span id="dotMap" class="dot"></span> Mapping <b id="mapText">n/a</b>
-          </span>
-          <span class="msg" id="statusMsg">Upload a schedule XLSX to begin.</span>
-        </div>
-
-        <div class="kpi">
-          <div class="card"><div class="n" id="kpiRows">0</div><div class="t">Clean rows</div></div>
-          <div class="card"><div class="n" id="kpiFound">0</div><div class="t">SKUs found in Source</div></div>
-          <div class="card"><div class="n" id="kpiMissing">0</div><div class="t">SKUs missing in Source</div></div>
-          <div class="card"><div class="n" id="kpiSheets">0</div><div class="t">Sheets</div></div>
-        </div>
-
-        <p class="hint noPrint" style="margin:12px 0 0 0">
-          Notes:
-          <br>• This file runs fully in the browser. Nothing is uploaded anywhere.
-          <br>• It uses the Source sheet as a lookup by SKU to enrich the day sheet.
-          <br>• If your Source headers are unusual, adjust the Source sheet selection.
-        </p>
-      </div>
-
-      <div class="split">
-        <div class="panel origPanel">
-          <div class="row" style="justify-content:space-between">
-            <div>
-              <div class="pill"><b>Original</b> preview (first 40 rows)</div>
-              <div class="small">Read-only preview of the selected day sheet.</div>
-            </div>
-          </div>
-          <div class="tableWrap" style="margin-top:10px">
-            <table id="origTable"><thead></thead><tbody></tbody></table>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="row" style="justify-content:space-between">
-            <div>
-              <div class="pill"><b>Clean</b> output</div>
-              <div class="small">Printable + downloadable view.</div>
-            </div>
-          </div>
-
-          <h2 class="printTitle" id="printTitle" style="margin:8px 0 10px 0; font-size:16px;">
-            Clean Production Schedule
-          </h2>
-
-          <div class="tableWrap" style="margin-top:10px">
-            <table id="cleanTable">
-              <thead>
-                <tr>
-                  <th>Priority</th>
-                  <th>Description</th>
-                  <th>SKU#</th>
-                  <th>Ordered</th>
-                  <th>Haz_Info</th>
-                  <th>Bottle Label Location</th>
-                  <th>Box Label Location</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-
-          <p class="small muted" style="margin:10px 0 0 0">
-            Join strategy: Day rows are detected where Priority is A–E and SKU exists. Enrichment comes from Source by SKU (fallback to day sheet values if missing).
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <div class="rightCol">
-      <div class="panel">
-        <div class="pill"><b>Assumptions</b> (adjustable later)</div>
-        <ul class="hint" style="margin:10px 0 0 18px">
-          <li><b>Day sheet columns</b>: A=Priority, B=Description, C=SKU, D=Ordered, I=Haz_Info, M=Bottle Label Location, N=Box Label Location.</li>
-          <li><b>Source lookup</b>: Detects headers by name (sku/description/haz/bottle/box). If it can’t map, join quality drops.</li>
-          <li><b>Multi-user</b>: This single-file version is client-only. For real multi-user, you’ll wrap this logic in a backend + storage + auth.</li>
-        </ul>
-
-        <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
-
-        <div class="pill"><b>Quick QA checklist</b></div>
-        <ul class="hint" style="margin:10px 0 0 18px">
-          <li>Do the clean rows count match what you expect for that day?</li>
-          <li>Do “missing SKUs” indicate real data issues or wrong Source sheet?</li>
-          <li>Spot-check: Priority + Ordered values are coming from the day sheet.</li>
-        </ul>
-
-        <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
-
-        <div class="pill"><b>Delivery</b></div>
-        <p class="hint" style="margin:10px 0 0 0">
-          Save this file as <span class="mono">schedule-cleaner.html</span> and open it in Chrome/Edge.
-          It requires internet access to load the SheetJS CDN.
-        </p>
-      </div>
+  <div class="panel">
+    <h2 class="printTitle" id="printTitle" style="margin:0 0 10px 0; font-size:16px;">
+      Clean Production Schedule
+    </h2>
+    <div class="tableWrap">
+      <table id="cleanTable">
+        <thead>
+          <tr>
+            <th>Priority</th>
+            <th>Description</th>
+            <th>SKU#</th>
+            <th>Ordered</th>
+            <th>Haz_Info</th>
+            <th>Bottle Label Location</th>
+            <th>Box Label Location</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
   </div>
 </main>
 
 <script>
-/**
- * Single-file Production Schedule Cleaner
- * - Reads XLSX in browser (SheetJS)
- * - Builds SKU lookup from Source sheet
- * - Extracts schedule rows from selected Day sheet
- * - Produces clean table + print + download (XLSX/CSV)
- */
+// Configuration: Set the XLSX file path here
+const XLSX_FILE_PATH = 'Production Schedule Q1-Q2 2026.xlsx';
 
-// ---------- State ----------
+// State
 let workbook = null;
 let sheetNames = [];
 let cleanRows = [];
-let lastJoinStats = { found: 0, missing: 0, mapped: false, mappingNote: "n/a" };
 
-// ---------- DOM ----------
+// DOM
 const $ = (id) => document.getElementById(id);
-
-const fileInput = $("fileInput");
-const sourceSelect = $("sourceSelect");
 const daySelect = $("daySelect");
-const filterInput = $("filterInput");
-
-const btnBuild = $("btnBuild");
 const btnPrint = $("btnPrint");
-const btnDownloadXlsx = $("btnDownloadXlsx");
-const btnDownloadCsv = $("btnDownloadCsv");
-
-const statusMsg = $("statusMsg");
-const dotLoaded = $("dotLoaded");
-const dotJoin = $("dotJoin");
-const dotMap = $("dotMap");
-const loadedText = $("loadedText");
-const joinText = $("joinText");
-const mapText = $("mapText");
-
-const kpiRows = $("kpiRows");
-const kpiFound = $("kpiFound");
-const kpiMissing = $("kpiMissing");
-const kpiSheets = $("kpiSheets");
-
-const origTable = $("origTable");
+const scheduleDate = $("scheduleDate");
+const shiftBadge = $("shiftBadge");
 const cleanTable = $("cleanTable");
 
-// ---------- Helpers ----------
-function setDot(dotEl, state) {
-  dotEl.classList.remove("good","warn","bad");
-  if (state) dotEl.classList.add(state);
-}
-function setStatus(message, level="warn") {
-  statusMsg.textContent = message;
-  if (level === "good") setDot(dotLoaded, "good");
-  if (level === "warn") setDot(dotLoaded, "warn");
-  if (level === "bad")  setDot(dotLoaded, "bad");
-}
+// Helpers
 function normalizeHeader(s) {
-  return String(s ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g," ")
-    .replace(/[#]/g,"#");
+  return String(s ?? "").trim().toLowerCase().replace(/\s+/g," ");
 }
+
 function looksLikeSku(value) {
   const v = String(value ?? "").trim();
-  if (!v) return false;
-  // Accept numeric or alphanumeric SKU-ish strings
-  return /^[A-Za-z0-9\-_\.]+$/.test(v) && v.length >= 3;
+  return v.length >= 3 && /^[A-Za-z0-9\-_\.]+$/.test(v);
 }
+
 function parseNumber(value) {
   if (value == null || value === "") return null;
   if (typeof value === "number" && isFinite(value)) return value;
@@ -389,510 +231,358 @@ function parseNumber(value) {
   const n = Number(v);
   return isFinite(n) ? n : null;
 }
+
 function isPriority(value) {
-  const v = String(value ?? "").trim().toUpperCase();
-  return /^[A-E]$/.test(v);
+  return /^[A-E]$/.test(String(value ?? "").trim().toUpperCase());
 }
+
 function safeStr(v) {
-  if (v == null) return "";
-  return String(v).trim();
+  return v == null ? "" : String(v).trim();
 }
+
 function pickSheetByNameLike(names, needle) {
   const n = needle.toLowerCase();
   return names.find(s => s.toLowerCase().includes(n));
 }
 
-// Render a 2D array (AOA) to a table element
-function renderTable(tableEl, aoa, maxRows=40, maxCols=18) {
-  const thead = tableEl.querySelector("thead");
-  const tbody = tableEl.querySelector("tbody");
-  thead.innerHTML = "";
-  tbody.innerHTML = "";
-
-  if (!aoa || aoa.length === 0) return;
-
-  const cols = Math.min(maxCols, Math.max(...aoa.map(r => (r ? r.length : 0)), 0));
-  const headerRow = aoa[0] || [];
-
-  const trh = document.createElement("tr");
-  for (let c = 0; c < cols; c++) {
-    const th = document.createElement("th");
-    th.textContent = safeStr(headerRow[c] ?? "");
-    trh.appendChild(th);
-  }
-  thead.appendChild(trh);
-
-  const rows = Math.min(maxRows, aoa.length);
-  for (let r = 1; r < rows; r++) {
-    const tr = document.createElement("tr");
-    const row = aoa[r] || [];
-    for (let c = 0; c < cols; c++) {
-      const td = document.createElement("td");
-      td.textContent = safeStr(row[c] ?? "");
-      tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
-  }
+// Get today's date in MM-DD format for sheet matching
+function getTodaySheetFormat() {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${month}-${day}`;
 }
 
-// Clean table render
+// Detect shift from sheet name or data
+function detectShift(sheetName, dayAoa) {
+  const nameLower = sheetName.toLowerCase();
+  
+  // Check for PM (Second Shift) first
+  if (nameLower.includes('pm')) {
+    return 'Second Shift';
+  }
+  
+  // Check sheet name for shift indicators
+  if (nameLower.includes('first') || nameLower.includes('1st') || nameLower.includes('1')) {
+    return 'First Shift';
+  }
+  if (nameLower.includes('second') || nameLower.includes('2nd') || nameLower.includes('2')) {
+    return 'Second Shift';
+  }
+  
+  // Check first few rows of data for shift indicators
+  for (let r = 0; r < Math.min(20, dayAoa.length); r++) {
+    const row = dayAoa[r] || [];
+    const rowText = row.join(' ').toLowerCase();
+    if (rowText.includes('first shift') || rowText.includes('1st shift')) {
+      return 'First Shift';
+    }
+    if (rowText.includes('second shift') || rowText.includes('2nd shift') || rowText.includes('pm')) {
+      return 'Second Shift';
+    }
+  }
+  
+  // Default to First Shift if not detected
+  return 'First Shift';
+}
+
+// Format date from sheet name (e.g., "01-05" -> "Friday, January 5")
+function formatScheduleDate(sheetName) {
+  const match = sheetName.match(/(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const month = parseInt(match[1]);
+    const day = parseInt(match[2]);
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    if (month >= 1 && month <= 12) {
+      // Try to determine year - check if workbook name has year, otherwise use current year
+      let year = new Date().getFullYear();
+      const workbookYearMatch = XLSX_FILE_PATH.match(/202[4-9]/);
+      if (workbookYearMatch) {
+        year = parseInt(workbookYearMatch[0]);
+      }
+      
+      // Create date object to get day of week
+      const date = new Date(year, month - 1, day);
+      const dayOfWeek = dayNames[date.getDay()];
+      
+      return `${dayOfWeek}, ${monthNames[month - 1]} ${day}`;
+    }
+  }
+  return sheetName;
+}
+
+// Find sheet matching today's date
+function findTodaySheet(names) {
+  const todayFormat = getTodaySheetFormat();
+  // Try exact match first (e.g., "01-02")
+  let match = names.find(s => s.trim() === todayFormat);
+  if (match) return match;
+  // Try without leading zeros (e.g., "1-2")
+  const altFormat = todayFormat.replace(/^0+/, '').replace(/-0+/, '-');
+  match = names.find(s => s.trim() === altFormat);
+  if (match) return match;
+  // Try contains today's format
+  match = names.find(s => s.includes(todayFormat) || s.includes(altFormat));
+  if (match) return match;
+  // Fallback: find any sheet with date-like pattern
+  return names.find(s => /^\d{1,2}-\d{1,2}$/.test(s.trim())) || null;
+}
+
+// Render clean table grouped by Line
 function renderCleanRows(rows) {
   const tbody = cleanTable.querySelector("tbody");
   tbody.innerHTML = "";
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">No schedule data found.</td></tr>';
+    return;
+  }
+  
+  // Group rows by Line
+  const groupedByLine = new Map();
   for (const row of rows) {
-    const tr = document.createElement("tr");
-    const cells = [
-      row.Priority,
-      row.Description,
-      row["SKU#"],
-      row.Ordered,
-      row.Haz_Info,
-      row["Bottle Label Location"],
-      row["Box Label Location"]
-    ];
-    for (const v of cells) {
-      const td = document.createElement("td");
-      td.textContent = v == null ? "" : String(v);
-      tr.appendChild(td);
+    const line = row.Line || "Unknown";
+    if (!groupedByLine.has(line)) {
+      groupedByLine.set(line, []);
     }
-    tbody.appendChild(tr);
+    groupedByLine.get(line).push(row);
   }
-}
-
-// Download CSV
-function downloadCSV(filename, rows) {
-  const headers = ["Priority","Description","SKU#","Ordered","Haz_Info","Bottle Label Location","Box Label Location"];
-  const escapeCSV = (v) => {
-    const s = String(v ?? "");
-    if (/[",\n]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
-    return s;
-  };
-  const lines = [
-    headers.join(","),
-    ...rows.map(r => headers.map(h => escapeCSV(r[h] ?? r[h.replace("#","")] ?? "")).join(","))
-  ];
-  const blob = new Blob([lines.join("\n")], {type:"text/csv;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(a.href);
-}
-
-// ---------- Source sheet header mapping ----------
-/**
- * Attempts to find Source columns by scanning the first ~50 rows for a header row.
- * Returns:
- *  {
- *    headerRowIndex,
- *    colSku, colDesc, colHaz, colBottle, colBox,
- *    note
- *  }
- */
-function detectSourceMapping(aoa) {
-  const maxScan = Math.min(50, aoa.length);
-  let best = null;
-
-  const match = (h, keys) => keys.some(k => h.includes(k));
-
-  for (let r = 0; r < maxScan; r++) {
-    const row = aoa[r] || [];
-    const norm = row.map(normalizeHeader);
-
-    // Potential header row if it contains 'sku' and 'description' or similar
-    const hasSku = norm.some(h => match(h, ["sku", "item", "product code", "material", "formula"]));
-    const hasDesc = norm.some(h => match(h, ["description", "product name", "desc"]));
-    if (!hasSku || !hasDesc) continue;
-
-    const findCol = (keys) => {
-      for (let c = 0; c < norm.length; c++) {
-        if (match(norm[c], keys)) return c;
+  
+  // Sort lines (Line #1, Line #2, etc.)
+  const sortedLines = Array.from(groupedByLine.keys()).sort((a, b) => {
+    const numA = parseInt(a.match(/\d+/)?.[0] || "999");
+    const numB = parseInt(b.match(/\d+/)?.[0] || "999");
+    return numA - numB;
+  });
+  
+  // Render each line group
+  for (const line of sortedLines) {
+    const lineRows = groupedByLine.get(line);
+    
+    // Add Line header row
+    const headerTr = document.createElement("tr");
+    headerTr.className = "line-header";
+    const headerTd = document.createElement("td");
+    headerTd.colSpan = 7;
+    headerTd.textContent = line;
+    headerTr.appendChild(headerTd);
+    tbody.appendChild(headerTr);
+    
+    // Add data rows for this line
+    for (const row of lineRows) {
+      const tr = document.createElement("tr");
+      const cells = [
+        row.Priority, row.Description, row["SKU#"], row.Ordered,
+        row.Haz_Info, row["Bottle Label Location"], row["Box Label Location"]
+      ];
+      for (const v of cells) {
+        const td = document.createElement("td");
+        td.textContent = v == null ? "" : String(v);
+        tr.appendChild(td);
       }
-      return -1;
-    };
-
-    const colSku = findCol(["sku", "item", "product code", "material", "formula"]);
-    const colDesc = findCol(["description", "product name", "desc"]);
-    const colHaz = findCol(["haz", "hazard", "haz info", "haz_info", "dg", "dangerous", "flammable"]);
-    const colBottle = findCol(["bottle label location", "bottle label", "bottle", "label bottle"]);
-    const colBox = findCol(["box label location", "box label", "box", "case label", "label box"]);
-
-    // Score mapping quality
-    let score = 0;
-    if (colSku >= 0) score += 4;
-    if (colDesc >= 0) score += 3;
-    if (colHaz >= 0) score += 1;
-    if (colBottle >= 0) score += 1;
-    if (colBox >= 0) score += 1;
-
-    if (!best || score > best.score) {
-      best = { score, headerRowIndex: r, colSku, colDesc, colHaz, colBottle, colBox };
+      tbody.appendChild(tr);
     }
   }
-
-  if (!best) {
-    return {
-      headerRowIndex: -1,
-      colSku: -1, colDesc: -1, colHaz: -1, colBottle: -1, colBox: -1,
-      note: "Could not detect Source headers. Join will use day sheet only."
-    };
-  }
-
-  const note = `Header row: ${best.headerRowIndex+1}, SKU col: ${best.colSku+1}, Desc col: ${best.colDesc+1}` +
-    (best.colHaz>=0 ? `, Haz col: ${best.colHaz+1}` : "") +
-    (best.colBottle>=0 ? `, Bottle col: ${best.colBottle+1}` : "") +
-    (best.colBox>=0 ? `, Box col: ${best.colBox+1}` : "");
-
-  return { ...best, note };
 }
 
-// Build SKU lookup from Source sheet AOA
-function buildSourceLookup(sourceAoa) {
-  const map = detectSourceMapping(sourceAoa);
-  const lookup = new Map();
-
-  if (map.headerRowIndex < 0 || map.colSku < 0) {
-    lastJoinStats.mapped = false;
-    lastJoinStats.mappingNote = map.note;
-    return { lookup, map };
-  }
-
-  const start = map.headerRowIndex + 1;
-  for (let r = start; r < sourceAoa.length; r++) {
-    const row = sourceAoa[r] || [];
-    const sku = safeStr(row[map.colSku]);
-    if (!looksLikeSku(sku)) continue;
-
-    const desc = map.colDesc >= 0 ? safeStr(row[map.colDesc]) : "";
-    const haz = map.colHaz >= 0 ? safeStr(row[map.colHaz]) : "";
-    const bottle = map.colBottle >= 0 ? safeStr(row[map.colBottle]) : "";
-    const box = map.colBox >= 0 ? safeStr(row[map.colBox]) : "";
-
-    lookup.set(sku, {
-      sku,
-      description: desc,
-      haz_info: haz,
-      bottle_label_location: bottle,
-      box_label_location: box
-    });
-  }
-
-  lastJoinStats.mapped = true;
-  lastJoinStats.mappingNote = map.note;
-  return { lookup, map };
-}
-
-// ---------- Day sheet extraction ----------
-/**
- * Extracts schedule rows from a day sheet.
- * Assumed columns (0-index):
- *  A Priority 0
- *  B Description 1
- *  C SKU 2
- *  D Ordered 3
- *  I Haz_Info 8
- *  M Bottle 12
- *  N Box 13
- */
+// Extract day sheet rows (A=Priority, B=Description, C=SKU, D=Ordered, I=Haz_Info, M=Bottle, N=Box)
+// Also extracts Line information by detecting "Line #X" headers or Line column
 function extractDayRows(dayAoa) {
   const rows = [];
+  let currentLine = null;
+  
+  // Try to detect if Line is in a specific column (check column E/index 4, or scan for "line" header)
+  let lineColIndex = -1;
+  for (let r = 0; r < Math.min(10, dayAoa.length); r++) {
+    const row = dayAoa[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const val = normalizeHeader(safeStr(row[c]));
+      if (val.includes("line") && !val.includes("label")) {
+        lineColIndex = c;
+        break;
+      }
+    }
+    if (lineColIndex >= 0) break;
+  }
+  // Fallback: try column E (index 4)
+  if (lineColIndex < 0) lineColIndex = 4;
+  
   for (let r = 0; r < dayAoa.length; r++) {
     const row = dayAoa[r] || [];
-
+    
+    // Check ALL cells in this row for a Line header (like "Line #1", "Line 1", etc.)
+    let foundLineHeader = false;
+    for (let c = 0; c < row.length; c++) {
+      const cellValue = safeStr(row[c]);
+      // Look for patterns like "Line #1", "Line 1", "Line1", "LINE 1", etc.
+      const lineMatch = cellValue.match(/line\s*#?\s*(\d+)/i);
+      if (lineMatch) {
+        currentLine = `Line #${lineMatch[1]}`;
+        foundLineHeader = true;
+        break;
+      }
+    }
+    
+    // Also check the detected Line column for a line number
+    if (!foundLineHeader && lineColIndex >= 0) {
+      const lineCellValue = safeStr(row[lineColIndex] || "");
+      // Check if it's just a number (like "1", "2") or "Line #1" format
+      if (lineCellValue) {
+        const numMatch = lineCellValue.match(/(\d+)/);
+        if (numMatch && lineCellValue.trim().length < 10) {
+          // Likely a line number
+          currentLine = `Line #${numMatch[1]}`;
+        } else {
+          const lineMatch = lineCellValue.match(/line\s*#?\s*(\d+)/i);
+          if (lineMatch) {
+            currentLine = `Line #${lineMatch[1]}`;
+          }
+        }
+      }
+    }
+    
+    // If we found a Line header row (row with only Line info, no Priority/SKU), skip it
+    if (foundLineHeader) {
+      const priority = safeStr(row[0]).toUpperCase();
+      const sku = safeStr(row[2]);
+      // Only skip if it's NOT a valid schedule row
+      if (!isPriority(priority) || !looksLikeSku(sku)) {
+        continue;
+      }
+    }
+    
+    // Now check if this is a valid schedule row
     const priority = safeStr(row[0]).toUpperCase();
     const sku = safeStr(row[2]);
-    const ordered = parseNumber(row[3]);
-
-    // Skip non-data lines
-    if (!isPriority(priority)) continue;
-    if (!looksLikeSku(sku)) continue;
-
-    const desc = safeStr(row[1]);
-    const haz = safeStr(row[8]);
-    const bottle = safeStr(row[12]);
-    const box = safeStr(row[13]);
+    
+    // Skip if not a valid schedule row
+    if (!isPriority(priority) || !looksLikeSku(sku)) continue;
+    
+    // Skip if we haven't found a Line yet (rows before first Line header)
+    if (!currentLine) continue;
 
     rows.push({
-      _r: r + 1,
+      Line: currentLine,
       Priority: priority,
-      Description: desc,
+      Description: safeStr(row[1]),
       "SKU#": sku,
-      Ordered: ordered ?? safeStr(row[3]),
-      Haz_Info: haz,
-      "Bottle Label Location": bottle,
-      "Box Label Location": box
+      Ordered: parseNumber(row[3]) ?? safeStr(row[3]),
+      Haz_Info: safeStr(row[8]),
+      "Bottle Label Location": safeStr(row[12]),
+      "Box Label Location": safeStr(row[13])
     });
   }
+  
   return rows;
 }
 
-// Join + fallback
-function buildCleanRows(dayRows, sourceLookup) {
-  let found = 0, missing = 0;
-  const out = dayRows.map(dr => {
-    const sku = dr["SKU#"];
-    const src = sourceLookup.get(sku);
-
-    if (src) found++; else missing++;
-
+// Use day sheet data directly (no source lookup)
+function buildCleanRows(dayRows) {
+  return dayRows.map(dr => {
+    // Handle empty Bottle Label Location - show "IN-HOUSE"
+    const bottleLocation = safeStr(dr["Bottle Label Location"]);
+    const finalBottle = bottleLocation ? bottleLocation : "IN-HOUSE";
+    
+    // Handle empty Box Label Location - show "IN-HOUSE"
+    const boxLocation = safeStr(dr["Box Label Location"]);
+    const finalBox = boxLocation ? boxLocation : "IN-HOUSE";
+    
+    // Handle Haz_Info - if 0, show nothing
+    let hazInfo = dr.Haz_Info;
+    if (hazInfo === 0 || hazInfo === "0" || safeStr(hazInfo) === "0") {
+      hazInfo = "";
+    }
+    
     return {
+      Line: dr.Line,
       Priority: dr.Priority,
-      Description: (src && src.description) ? src.description : dr.Description,
-      "SKU#": sku,
+      Description: dr.Description,
+      "SKU#": dr["SKU#"],
       Ordered: dr.Ordered,
-      Haz_Info: (src && src.haz_info) ? src.haz_info : dr.Haz_Info,
-      "Bottle Label Location": (src && src.bottle_label_location) ? src.bottle_label_location : dr["Bottle Label Location"],
-      "Box Label Location": (src && src.box_label_location) ? src.box_label_location : dr["Box Label Location"]
+      Haz_Info: hazInfo,
+      "Bottle Label Location": finalBottle,
+      "Box Label Location": finalBox
     };
   });
-
-  lastJoinStats.found = found;
-  lastJoinStats.missing = missing;
-  return out;
 }
 
-function updateKpis() {
-  kpiRows.textContent = String(cleanRows.length);
-  kpiFound.textContent = String(lastJoinStats.found ?? 0);
-  kpiMissing.textContent = String(lastJoinStats.missing ?? 0);
-  kpiSheets.textContent = String(sheetNames.length);
-
-  // Join badge
-  if (!workbook) {
-    joinText.textContent = "n/a";
-    setDot(dotJoin, "warn");
-  } else {
-    const total = (lastJoinStats.found ?? 0) + (lastJoinStats.missing ?? 0);
-    if (total === 0) {
-      joinText.textContent = "n/a";
-      setDot(dotJoin, "warn");
-    } else {
-      const pct = Math.round((lastJoinStats.found / total) * 100);
-      joinText.textContent = `${pct}%`;
-      if (pct >= 85) setDot(dotJoin, "good");
-      else if (pct >= 60) setDot(dotJoin, "warn");
-      else setDot(dotJoin, "bad");
-    }
-  }
-
-  // Mapping badge
-  mapText.textContent = lastJoinStats.mappingNote || "n/a";
-  if (!workbook) setDot(dotMap, "warn");
-  else setDot(dotMap, lastJoinStats.mapped ? "good" : "warn");
-}
-
-// Read sheet to AOA
 function sheetToAoa(name) {
   const ws = workbook.Sheets[name];
   return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
 }
 
-function enableControls(enabled) {
-  sourceSelect.disabled = !enabled;
-  daySelect.disabled = !enabled;
-  btnBuild.disabled = !enabled;
-  filterInput.disabled = !enabled;
-}
-
-// Populate selects
+// Populate day sheet select and auto-select
 function populateSheetSelects() {
-  sourceSelect.innerHTML = "";
   daySelect.innerHTML = "";
 
   for (const n of sheetNames) {
-    const opt1 = document.createElement("option");
-    opt1.value = n; opt1.textContent = n;
-    sourceSelect.appendChild(opt1);
-
-    const opt2 = document.createElement("option");
-    opt2.value = n; opt2.textContent = n;
-    daySelect.appendChild(opt2);
+    const opt = document.createElement("option");
+    opt.value = n; opt.textContent = n;
+    daySelect.appendChild(opt);
   }
 
-  // Auto-detect source: prefers sheet containing "source"
-  const autoSource = pickSheetByNameLike(sheetNames, "source") || sheetNames[0];
-  sourceSelect.value = autoSource;
-
-  // Auto-detect day: prefers something like "01-02" / "1-2" / contains "-"
-  const autoDay =
-    sheetNames.find(s => /^\d{1,2}-\d{1,2}$/.test(s.trim())) ||
-    sheetNames.find(s => s.includes("-")) ||
-    sheetNames.find(s => s.toLowerCase().includes("day")) ||
-    sheetNames[1] ||
-    sheetNames[0];
-
-  daySelect.value = autoDay;
-
-  // Render initial original preview
-  try {
-    const dayAoa = sheetToAoa(daySelect.value);
-    renderTable(origTable, dayAoa, 40, 18);
-  } catch {}
+  // Auto-detect today's sheet
+  const todaySheet = findTodaySheet(sheetNames);
+  daySelect.value = todaySheet || sheetNames[1] || sheetNames[0];
 }
 
-// Apply filter on cleanRows
-function applyFilter() {
-  const q = filterInput.value.trim().toLowerCase();
-  if (!q) {
-    renderCleanRows(cleanRows);
-    return;
-  }
-  const filtered = cleanRows.filter(r => {
-    const blob = [
-      r.Priority,
-      r.Description,
-      r["SKU#"],
-      r.Ordered,
-      r.Haz_Info,
-      r["Bottle Label Location"],
-      r["Box Label Location"]
-    ].join(" ").toLowerCase();
-    return blob.includes(q);
-  });
-  renderCleanRows(filtered);
-}
-
-// Build action
+// Build clean table
 function build() {
   if (!workbook) return;
 
-  const sourceName = sourceSelect.value;
   const dayName = daySelect.value;
-
-  const sourceAoa = sheetToAoa(sourceName);
   const dayAoa = sheetToAoa(dayName);
 
-  // Original preview for day
-  renderTable(origTable, dayAoa, 40, 18);
-
-  // Lookup + extract + join
-  const { lookup } = buildSourceLookup(sourceAoa);
   const dayRows = extractDayRows(dayAoa);
-  cleanRows = buildCleanRows(dayRows, lookup);
+  cleanRows = buildCleanRows(dayRows);
 
-  // Update print title
+  // Update header with schedule info
+  const shift = detectShift(dayName, dayAoa);
+  const formattedDate = formatScheduleDate(dayName);
+  
+  scheduleDate.textContent = formattedDate;
+  shiftBadge.textContent = shift;
+
   $("printTitle").textContent = `Clean Production Schedule — ${dayName}`;
-
   renderCleanRows(cleanRows);
   btnPrint.disabled = cleanRows.length === 0;
-  btnDownloadXlsx.disabled = cleanRows.length === 0;
-  btnDownloadCsv.disabled = cleanRows.length === 0;
-
-  // Status
-  const total = cleanRows.length;
-  if (total === 0) {
-    statusMsg.textContent = "No schedule rows detected. Verify the selected day sheet and the Priority/SKU columns.";
-    setDot(dotJoin, "warn");
-  } else {
-    const found = lastJoinStats.found ?? 0;
-    const missing = lastJoinStats.missing ?? 0;
-    statusMsg.textContent =
-      `Built ${total} clean rows from "${dayName}". Source join: ${found} found, ${missing} missing.`;
-  }
-
-  updateKpis();
-  applyFilter();
 }
 
-// Downloads XLSX using SheetJS
-function downloadCleanXlsx() {
-  if (!cleanRows.length) return;
-  const headers = ["Priority","Description","SKU#","Ordered","Haz_Info","Bottle Label Location","Box Label Location"];
-  const aoa = [headers, ...cleanRows.map(r => headers.map(h => r[h] ?? ""))];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-  // Basic column widths
-  ws["!cols"] = [
-    { wch: 9 },   // Priority
-    { wch: 42 },  // Description
-    { wch: 14 },  // SKU
-    { wch: 10 },  // Ordered
-    { wch: 18 },  // Haz
-    { wch: 26 },  // Bottle
-    { wch: 24 }   // Box
-  ];
-
-  const wb = XLSX.utils.book_new();
-  const sheetName = `${daySelect.value} (Clean)`.slice(0, 31);
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-
-  const filename = `Clean_${daySelect.value}.xlsx`.replace(/[^\w\-.]+/g,"_");
-  XLSX.writeFile(wb, filename);
-}
-
-// ---------- Events ----------
-fileInput.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-
+// Load XLSX file automatically
+async function loadWorkbook() {
   try {
-    setDot(dotLoaded, "warn");
-    loadedText.textContent = "loading...";
-    statusMsg.textContent = "Reading workbook…";
-
-    const buf = await file.arrayBuffer();
+    const response = await fetch(XLSX_FILE_PATH);
+    if (!response.ok) throw new Error(`Failed to load file: ${response.statusText}`);
+    
+    const buf = await response.arrayBuffer();
     workbook = XLSX.read(buf, { type: "array" });
     sheetNames = workbook.SheetNames || [];
 
-    loadedText.textContent = "loaded";
-    setDot(dotLoaded, "good");
-
-    enableControls(true);
-    btnBuild.disabled = false;
-
     populateSheetSelects();
-    updateKpis();
-
-    statusMsg.textContent = `Workbook loaded: ${file.name}. Select a day sheet and click “Build Clean Table”.`;
+    daySelect.disabled = false;
+    
+    // Auto-build on load
+    build();
   } catch (err) {
     console.error(err);
-    workbook = null;
-    sheetNames = [];
-    enableControls(false);
-
-    setDot(dotLoaded, "bad");
-    loadedText.textContent = "error";
-    statusMsg.textContent = "Failed to read XLSX. Try a different file or re-export the workbook.";
+    scheduleDate.textContent = "Error loading file";
+    shiftBadge.textContent = "—";
+    alert(`Error loading file: ${err.message}. Make sure "${XLSX_FILE_PATH}" exists in the same directory.`);
   }
-});
+}
 
+// Event listeners
 daySelect.addEventListener("change", () => {
   if (!workbook) return;
-  try {
-    const dayAoa = sheetToAoa(daySelect.value);
-    renderTable(origTable, dayAoa, 40, 18);
-    statusMsg.textContent = `Selected day sheet: "${daySelect.value}". Click “Build Clean Table”.`;
-  } catch {}
+  build(); // Auto-build when day sheet changes
 });
 
-sourceSelect.addEventListener("change", () => {
-  if (!workbook) return;
-  statusMsg.textContent = `Selected source sheet: "${sourceSelect.value}". Click “Build Clean Table”.`;
-});
+btnPrint.addEventListener("click", () => { if (cleanRows.length) window.print(); });
 
-btnBuild.addEventListener("click", build);
-
-filterInput.addEventListener("input", applyFilter);
-
-btnPrint.addEventListener("click", () => {
-  if (!cleanRows.length) return;
-  window.print();
-});
-
-btnDownloadXlsx.addEventListener("click", downloadCleanXlsx);
-
-btnDownloadCsv.addEventListener("click", () => {
-  if (!cleanRows.length) return;
-  const filename = `Clean_${daySelect.value}.csv`.replace(/[^\w\-.]+/g,"_");
-  downloadCSV(filename, cleanRows);
-});
-
-// Initial badge state
-setDot(dotLoaded, "warn");
-setDot(dotJoin, "warn");
-setDot(dotMap, "warn");
+// Initialize
+loadWorkbook();
 </script>
 </body>
 </html>
