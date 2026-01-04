@@ -219,6 +219,22 @@
       height:50px;
       opacity:0.9;
     }
+    .footer-nav{
+      display:flex;
+      align-items:center;
+      gap:16px;
+    }
+    .footer-nav a{
+      color:var(--accent);
+      text-decoration:none;
+      font-weight:500;
+      font-size:13px;
+      transition:color 0.2s ease;
+    }
+    .footer-nav a:hover{
+      color:var(--accent-dark);
+      text-decoration:underline;
+    }
   </style>
 </head>
 <body>
@@ -266,7 +282,12 @@
       <button id="resetBtn" title="Clear selections">Reset</button>
     </div>
       <div class="footer-info">
-        <div class="muted" style="font-size:13px;">App made by <strong>J.L.</strong></div>
+        <div>
+          <div class="muted" style="font-size:13px;">App made by <strong>J.L.</strong></div>
+          <div class="footer-nav" style="margin-top:8px;">
+            <a href="schedule.html">Production Schedule</a>
+          </div>
+        </div>
         <img src="maintex-logo.jpg" alt="Maintex Logo">
       </div>
     </div>
