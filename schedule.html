@@ -194,6 +194,34 @@
       font-size:15px;
     }
     .small{font-size:11px;color:var(--muted)}
+    .footer-info{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:2rem;
+      padding-top:1.5rem;
+      border-top:1px solid var(--border);
+    }
+    .footer-info img{
+      height:50px;
+      opacity:0.9;
+    }
+    .footer-nav{
+      display:flex;
+      align-items:center;
+      gap:16px;
+    }
+    .footer-nav a{
+      color:var(--accent);
+      text-decoration:none;
+      font-weight:500;
+      font-size:13px;
+      transition:color 0.2s ease;
+    }
+    .footer-nav a:hover{
+      color:var(--accent-dark);
+      text-decoration:underline;
+    }
     .printTitle{display:none}
     .printHeader{display:none}
     @page{
@@ -211,7 +239,7 @@
         color:var(--text);
         overflow:visible;
       }
-      header, .controls, .status{display:none !important}
+      header, .controls, .status, .footer-info{display:none !important}
       main{
         padding:0;
         margin:0;
@@ -341,6 +369,16 @@
         <tbody></tbody>
       </table>
     </div>
+  </div>
+
+  <div class="footer-info">
+    <div>
+      <div class="muted" style="font-size:13px;">App made by <strong>J.L.</strong></div>
+      <div class="footer-nav" style="margin-top:8px;">
+        <a href="index.html">Product Weight Calculator</a>
+      </div>
+    </div>
+    <img src="maintex-logo.jpg" alt="Maintex Logo">
   </div>
 </main>
 
