@@ -212,72 +212,23 @@
       border-bottom:3px solid var(--line-accent);
       font-size:15px;
     }
-    .pick-wrap{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      flex-wrap:nowrap;
-      max-width:100%;
+
+    .label-pickable{
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      padding:2px 6px;
+      border-radius:6px;
+      transition: background-color 160ms ease, color 160ms ease, text-decoration-color 160ms ease;
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      text-underline-offset: 3px;
+      display:inline-block;
     }
-    .pick-text{display:inline-block}
-    .pick-checkbox{
-      width:18px;
-      height:18px;
-      flex:0 0 auto;
-      accent-color: var(--accent);
-    }
-    .cell-value{display:inline-block}
-
-    /* Mobile/tablet: stack schedule rows, no side scrolling */
-    @media (max-width: 900px){
-      main{padding:20px 16px;}
-      .controls{padding:14px;}
-      input{min-width:220px;}
-
-      #cleanTable{min-width:0;}
-      #cleanTable thead{display:none;}
-      #cleanTable, #cleanTable tbody{display:block; width:100%;}
-      #cleanTable tr{display:block;}
-      #cleanTable td{
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:14px;
-        width:100%;
-        padding:10px 12px;
-      }
-      #cleanTable td::before{
-        content: attr(data-label);
-        flex:0 0 auto;
-        font-size:11px;
-        font-weight:700;
-        color:var(--muted);
-        text-transform:uppercase;
-        letter-spacing:0.7px;
-      }
-      #cleanTable td .cell-value{
-        margin-left:auto;
-        text-align:right;
-        max-width:60%;
-        white-space:normal;
-        word-break:normal;
-      }
-      #cleanTable td .pick-wrap.cell-value{
-        display:inline-flex;
-        align-items:center;
-        justify-content:flex-end;
-      }
-      #cleanTable td .pick-text{
-        white-space:normal;
-        word-break:normal;
-      }
-      #cleanTable .line-header td{
-        display:block;
-        padding:16px;
-      }
-      #cleanTable .line-header td::before{content:"";}
-
-      th, td{font-size:12px;}
+    .label-picked{
+      background: rgba(34, 197, 94, 0.14); /* green */
+      color: #166534;
+      text-decoration-color: rgba(22, 101, 52, 0.85);
     }
 
     .small{font-size:11px;color:var(--muted)}
@@ -403,7 +354,19 @@
         padding:6px 8px;
         font-size:11px;
       }
-      .pick-checkbox{display:none !important}
+      /* Keep print identical to pre-highlight look */
+      .label-pickable{
+        padding:0 !important;
+        border-radius:0 !important;
+        background:transparent !important;
+        color:inherit !important;
+        text-decoration:none !important;
+      }
+      .label-picked{
+        background:transparent !important;
+        color:inherit !important;
+        text-decoration:none !important;
+      }
       .line-header{
         background:#ebf8ff !important;
         color:#1e3a8a !important;
@@ -509,10 +472,6 @@
 // Configuration: Set the XLSX file path here
 const XLSX_FILE_PATH = 'Production Schedule Q1-Q2 2026.xlsx';
 
-// Optional shared storage for "picked" checkboxes (Google Apps Script Web App URL).
-// If blank, the picked state is saved only on the current device/browser.
-const PICK_STATUS_ENDPOINT = '';
-
 // State
 let workbook = null;
 let allSheetNames = [];
@@ -520,9 +479,6 @@ let sheetNames = []; // schedule day sheets only (for dropdown)
 let cleanRows = [];
 let sourceRecords = [];
 let sourceReady = false;
-
-// Pick status cache (per day sheet)
-let pickState = new Map(); // key -> boolean
 
 // DOM
 const $ = (id) => document.getElementById(id);
@@ -582,22 +538,6 @@ function pickHeader(keys, regexList) {
   return null;
 }
 
-function hashKey(str) {
-  // FNV-1a 32-bit
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  // unsigned to base36 for shorter keys
-  return (h >>> 0).toString(36);
-}
-
-function makePickKey(dayName, row, kind) {
-  const raw = `${dayName}|${row.Line}|${row["SKU#"]}|${row.Description}|${kind}`;
-  return `pick:${hashKey(raw)}`;
-}
-
 function lineNumberFromLabel(lineLabel) {
   const m = String(lineLabel ?? "").match(/(\d+)/);
   return m ? parseInt(m[1], 10) : null;
@@ -616,56 +556,35 @@ function uomForScheduleRow(row) {
   return "";
 }
 
-function localPickStorageKey(key) {
-  return `maintex:schedule:picks:v1:${key}`;
+function hashKey(str) {
+  // FNV-1a 32-bit
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
 }
 
-async function pickBulkGet(keys) {
-  // Returns Map(key -> boolean)
-  const out = new Map();
-  if (!keys.length) return out;
-
-  // Remote (shared) mode
-  if (PICK_STATUS_ENDPOINT) {
-    try {
-      const resp = await fetch(PICK_STATUS_ENDPOINT, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "bulkGet", keys })
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      const values = data?.values || {};
-      for (const k of keys) out.set(k, Boolean(values[k]));
-      return out;
-    } catch (e) {
-      console.warn("Pick bulkGet failed, falling back to local storage.", e);
-      // fall through to local
-    }
-  }
-
-  // Local fallback
-  for (const k of keys) {
-    const v = localStorage.getItem(localPickStorageKey(k));
-    out.set(k, v === "1");
-  }
-  return out;
+function pickedStorageKey(dayName, row, kind) {
+  const raw = `${dayName}|${row.Line}|${row["SKU#"]}|${row.Description}|${kind}`;
+  return `maintex:schedule:picked:v1:${hashKey(raw)}`;
 }
 
-async function pickSet(key, value) {
-  // Remote (shared) mode
-  if (PICK_STATUS_ENDPOINT) {
-    const resp = await fetch(PICK_STATUS_ENDPOINT, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "set", key, value: Boolean(value) })
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return;
+function isPicked(dayName, row, kind) {
+  try {
+    return localStorage.getItem(pickedStorageKey(dayName, row, kind)) === "1";
+  } catch {
+    return false;
   }
+}
 
-  // Local fallback
-  localStorage.setItem(localPickStorageKey(key), value ? "1" : "0");
+function setPicked(dayName, row, kind, picked) {
+  try {
+    localStorage.setItem(pickedStorageKey(dayName, row, kind), picked ? "1" : "0");
+  } catch {
+    // ignore storage failures
+  }
 }
 
 // Get today's date in MM-DD format for sheet matching
@@ -827,104 +746,83 @@ function renderCleanRows(rows, dayName) {
     // Add data rows for this line
     for (const row of lineRows) {
       const tr = document.createElement("tr");
+      const uom = uomForScheduleRow(row);
+      const ord = row.Ordered == null ? "" : String(row.Ordered);
+
       // Description
       const tdDesc = document.createElement("td");
-      tdDesc.setAttribute("data-label", "Description");
-      const descVal = document.createElement("span");
-      descVal.className = "cell-value";
-      descVal.textContent = row.Description ?? "";
-      tdDesc.appendChild(descVal);
+      tdDesc.textContent = row.Description ?? "";
       tr.appendChild(tdDesc);
 
       // SKU#
       const tdSku = document.createElement("td");
-      tdSku.setAttribute("data-label", "SKU#");
-      const skuVal = document.createElement("span");
-      skuVal.className = "cell-value";
-      skuVal.textContent = row["SKU#"] ?? "";
-      tdSku.appendChild(skuVal);
+      tdSku.textContent = row["SKU#"] ?? "";
       tr.appendChild(tdSku);
 
-      // Ordered
+      // Ordered (UOM)
       const tdOrd = document.createElement("td");
-      const uom = uomForScheduleRow(row);
-      const ord = row.Ordered == null ? "" : String(row.Ordered);
-      tdOrd.setAttribute("data-label", "Ordered (UOM)");
-      const ordVal = document.createElement("span");
-      ordVal.className = "cell-value";
-      ordVal.textContent = ord ? (uom ? `${ord} ${uom}` : ord) : "";
-      tdOrd.appendChild(ordVal);
+      tdOrd.textContent = ord ? (uom ? `${ord} ${uom}` : ord) : "";
       tr.appendChild(tdOrd);
 
       // Haz_Info
       const tdHaz = document.createElement("td");
-      tdHaz.setAttribute("data-label", "Haz_Info");
-      const hazVal = document.createElement("span");
-      hazVal.className = "cell-value";
-      hazVal.textContent = row.Haz_Info ?? "";
-      tdHaz.appendChild(hazVal);
+      tdHaz.textContent = row.Haz_Info ?? "";
       tr.appendChild(tdHaz);
 
-      // Bottle Label Location + picked checkbox
-      const bottleKey = makePickKey(dayName, row, "bottle");
+      // Bottle Label Location (tap to toggle picked highlight)
       const tdBottle = document.createElement("td");
-      tdBottle.setAttribute("data-label", "Bottle Label Location");
-      const bottleWrap = document.createElement("div");
-      bottleWrap.className = "pick-wrap cell-value";
-      const bottleCb = document.createElement("input");
-      bottleCb.type = "checkbox";
-      bottleCb.className = "pick-checkbox";
-      bottleCb.checked = Boolean(pickState.get(bottleKey));
-      bottleCb.setAttribute("aria-label", "Bottle label picked");
-      bottleCb.addEventListener("change", async () => {
-        const next = bottleCb.checked;
-        pickState.set(bottleKey, next);
-        try {
-          await pickSet(bottleKey, next);
-        } catch (e) {
-          console.error(e);
-          pickState.set(bottleKey, !next);
-          bottleCb.checked = !next;
-          alert("Could not save picked status. Please try again.");
+      const bottleSpan = document.createElement("span");
+      bottleSpan.className = "label-pickable";
+      bottleSpan.textContent = row["Bottle Label Location"] ?? "";
+      bottleSpan.setAttribute("role", "button");
+      bottleSpan.setAttribute("tabindex", "0");
+      bottleSpan.setAttribute("aria-label", "Toggle bottle label picked");
+      const bottleApply = () => {
+        const picked = isPicked(dayName, row, "bottle");
+        bottleSpan.classList.toggle("label-picked", picked);
+      };
+      bottleApply();
+      const bottleToggle = () => {
+        const next = !isPicked(dayName, row, "bottle");
+        setPicked(dayName, row, "bottle", next);
+        bottleSpan.classList.toggle("label-picked", next);
+      };
+      bottleSpan.addEventListener("click", bottleToggle);
+      bottleSpan.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          bottleToggle();
         }
       });
-      const bottleText = document.createElement("span");
-      bottleText.className = "pick-text";
-      bottleText.textContent = row["Bottle Label Location"] ?? "";
-      bottleWrap.appendChild(bottleText);
-      bottleWrap.appendChild(bottleCb);
-      tdBottle.appendChild(bottleWrap);
+      tdBottle.appendChild(bottleSpan);
       tr.appendChild(tdBottle);
 
-      // Box Label Location + picked checkbox
-      const boxKey = makePickKey(dayName, row, "box");
+      // Box Label Location (tap to toggle picked highlight)
       const tdBox = document.createElement("td");
-      tdBox.setAttribute("data-label", "Box Label Location");
-      const boxWrap = document.createElement("div");
-      boxWrap.className = "pick-wrap cell-value";
-      const boxCb = document.createElement("input");
-      boxCb.type = "checkbox";
-      boxCb.className = "pick-checkbox";
-      boxCb.checked = Boolean(pickState.get(boxKey));
-      boxCb.setAttribute("aria-label", "Box label picked");
-      boxCb.addEventListener("change", async () => {
-        const next = boxCb.checked;
-        pickState.set(boxKey, next);
-        try {
-          await pickSet(boxKey, next);
-        } catch (e) {
-          console.error(e);
-          pickState.set(boxKey, !next);
-          boxCb.checked = !next;
-          alert("Could not save picked status. Please try again.");
+      const boxSpan = document.createElement("span");
+      boxSpan.className = "label-pickable";
+      boxSpan.textContent = row["Box Label Location"] ?? "";
+      boxSpan.setAttribute("role", "button");
+      boxSpan.setAttribute("tabindex", "0");
+      boxSpan.setAttribute("aria-label", "Toggle box label picked");
+      const boxApply = () => {
+        const picked = isPicked(dayName, row, "box");
+        boxSpan.classList.toggle("label-picked", picked);
+      };
+      boxApply();
+      const boxToggle = () => {
+        const next = !isPicked(dayName, row, "box");
+        setPicked(dayName, row, "box", next);
+        boxSpan.classList.toggle("label-picked", next);
+      };
+      boxSpan.addEventListener("click", boxToggle);
+      boxSpan.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          boxToggle();
         }
       });
-      const boxText = document.createElement("span");
-      boxText.className = "pick-text";
-      boxText.textContent = row["Box Label Location"] ?? "";
-      boxWrap.appendChild(boxText);
-      boxWrap.appendChild(boxCb);
-      tdBox.appendChild(boxWrap);
+      tdBox.appendChild(boxSpan);
       tr.appendChild(tdBox);
 
       tbody.appendChild(tr);
