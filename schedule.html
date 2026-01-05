@@ -176,14 +176,12 @@
       width:100%;
       min-width:700px;
       background:white;
-      table-layout:fixed;
     }
     th, td{
       border-bottom:1px solid var(--border);
       padding:14px 16px;
       text-align:left;
       font-size:13px;
-      overflow-wrap:anywhere;
     }
     th{
       position:sticky;
@@ -213,33 +211,73 @@
       font-size:15px;
     }
     .pick-wrap{
-      display:flex;
+      display:inline-flex;
       align-items:center;
-      justify-content:space-between;
       gap:8px;
       flex-wrap:nowrap;
-      width:100%;
+      max-width:100%;
     }
-    .pick-text{
-      flex:1 1 auto;
-      min-width:0;
-    }
+    .pick-text{display:inline-block}
     .pick-checkbox{
       width:18px;
       height:18px;
       flex:0 0 auto;
       accent-color: var(--accent);
     }
+    .cell-value{display:inline-block}
 
-    /* Mobile/tablet: keep everything on-page (no horizontal scroll) */
+    /* Mobile/tablet: stack schedule rows, no side scrolling */
     @media (max-width: 900px){
       main{padding:20px 16px;}
       .controls{padding:14px;}
-      table{min-width:0;}
-      th, td{padding:10px 10px; font-size:12px;}
-      th{font-size:11px;}
       input{min-width:220px;}
+
+      #cleanTable{min-width:0;}
+      #cleanTable thead{display:none;}
+      #cleanTable, #cleanTable tbody{display:block; width:100%;}
+      #cleanTable tr{display:block;}
+      #cleanTable td{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:14px;
+        width:100%;
+        padding:10px 12px;
+      }
+      #cleanTable td::before{
+        content: attr(data-label);
+        flex:0 0 auto;
+        font-size:11px;
+        font-weight:700;
+        color:var(--muted);
+        text-transform:uppercase;
+        letter-spacing:0.7px;
+      }
+      #cleanTable td .cell-value{
+        margin-left:auto;
+        text-align:right;
+        max-width:60%;
+        white-space:normal;
+        word-break:normal;
+      }
+      #cleanTable td .pick-wrap.cell-value{
+        display:inline-flex;
+        align-items:center;
+        justify-content:flex-end;
+      }
+      #cleanTable td .pick-text{
+        white-space:normal;
+        word-break:normal;
+      }
+      #cleanTable .line-header td{
+        display:block;
+        padding:16px;
+      }
+      #cleanTable .line-header td::before{content:"";}
+
+      th, td{font-size:12px;}
     }
+
     .small{font-size:11px;color:var(--muted)}
     .footer-info{
       display:flex;
@@ -789,31 +827,48 @@ function renderCleanRows(rows, dayName) {
       const tr = document.createElement("tr");
       // Description
       const tdDesc = document.createElement("td");
-      tdDesc.textContent = row.Description ?? "";
+      tdDesc.setAttribute("data-label", "Description");
+      const descVal = document.createElement("span");
+      descVal.className = "cell-value";
+      descVal.textContent = row.Description ?? "";
+      tdDesc.appendChild(descVal);
       tr.appendChild(tdDesc);
 
       // SKU#
       const tdSku = document.createElement("td");
-      tdSku.textContent = row["SKU#"] ?? "";
+      tdSku.setAttribute("data-label", "SKU#");
+      const skuVal = document.createElement("span");
+      skuVal.className = "cell-value";
+      skuVal.textContent = row["SKU#"] ?? "";
+      tdSku.appendChild(skuVal);
       tr.appendChild(tdSku);
 
       // Ordered
       const tdOrd = document.createElement("td");
       const uom = uomForScheduleRow(row);
       const ord = row.Ordered == null ? "" : String(row.Ordered);
-      tdOrd.textContent = ord ? (uom ? `${ord} ${uom}` : ord) : "";
+      tdOrd.setAttribute("data-label", "Ordered (UOM)");
+      const ordVal = document.createElement("span");
+      ordVal.className = "cell-value";
+      ordVal.textContent = ord ? (uom ? `${ord} ${uom}` : ord) : "";
+      tdOrd.appendChild(ordVal);
       tr.appendChild(tdOrd);
 
       // Haz_Info
       const tdHaz = document.createElement("td");
-      tdHaz.textContent = row.Haz_Info ?? "";
+      tdHaz.setAttribute("data-label", "Haz_Info");
+      const hazVal = document.createElement("span");
+      hazVal.className = "cell-value";
+      hazVal.textContent = row.Haz_Info ?? "";
+      tdHaz.appendChild(hazVal);
       tr.appendChild(tdHaz);
 
       // Bottle Label Location + picked checkbox
       const bottleKey = makePickKey(dayName, row, "bottle");
       const tdBottle = document.createElement("td");
+      tdBottle.setAttribute("data-label", "Bottle Label Location");
       const bottleWrap = document.createElement("div");
-      bottleWrap.className = "pick-wrap";
+      bottleWrap.className = "pick-wrap cell-value";
       const bottleCb = document.createElement("input");
       bottleCb.type = "checkbox";
       bottleCb.className = "pick-checkbox";
@@ -842,8 +897,9 @@ function renderCleanRows(rows, dayName) {
       // Box Label Location + picked checkbox
       const boxKey = makePickKey(dayName, row, "box");
       const tdBox = document.createElement("td");
+      tdBox.setAttribute("data-label", "Box Label Location");
       const boxWrap = document.createElement("div");
-      boxWrap.className = "pick-wrap";
+      boxWrap.className = "pick-wrap cell-value";
       const boxCb = document.createElement("input");
       boxCb.type = "checkbox";
       boxCb.className = "pick-checkbox";
