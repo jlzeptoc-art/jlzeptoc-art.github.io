@@ -962,78 +962,115 @@ function loadSourceSheet() {
   }
 
   const ws = workbook.Sheets[sourceName];
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: true });
-  if (!rows.length) {
+  // Use AOA so we can detect header row even if it's not row 1 (Source has a title block).
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true });
+  if (!aoa.length) {
     setSourceStatus('Source sheet is empty.');
-    sourceSearch.disabled = true;
-    sourceSearchBtn.disabled = true;
-    sourceClearBtn.disabled = true;
+    sourceSearch.disabled = false;
+    sourceSearchBtn.disabled = false;
+    sourceClearBtn.disabled = false;
     return;
   }
 
-  const keys = Object.keys(rows[0] || {});
-  const itemKey = pickHeader(keys, [
-    "\\bitem\\s*#\\b",
-    "\\bitem\\s*no\\b",
-    "\\bitem\\s*number\\b",
-    "\\bsku\\b",
-    "\\bformula\\b",
-    "\\bproduct\\s*(no|num|number)\\b"
-  ]);
-  const descKey = pickHeader(keys, [
-    "\\bdescription\\b",
-    "\\bproduct\\s*name\\b",
-    "\\bname\\b"
-  ]);
-  const hazKey = pickHeader(keys, [
-    "haz[_\\s-]*info",
-    "\\bhaz\\b",
-    "\\bhazmat\\b"
-  ]);
-  const insertKey = pickHeader(keys, [
-    "\\binsert\\s*info\\b",
-    "\\binsert\\b"
-  ]);
-  const bottleLabelKey = pickHeader(keys, [
-    "bottle\\s*label\\s*location",
-    "label\\s*location",
-    "bottle\\s*label"
-  ]);
-  const boxLabelKey = pickHeader(keys, [
-    "box\\s*label\\s*location",
-    "case\\s*label\\s*location",
-    "box\\s*label"
-  ]);
-  const closureKey = pickHeader(keys, [
-    "closure\\s*type",
-    "\\bclosure\\b"
-  ]);
-  const packKey = pickHeader(keys, [
-    "pack\\s*type",
-    "\\bpack\\b"
-  ]);
+  const normCell = (v) => String(v ?? "").trim().toLowerCase();
+  const isMatch = (cell, patterns) => patterns.some((p) => p.test(cell));
 
-  if (!itemKey && !descKey) {
-    setSourceStatus('Source sheet loaded, but could not detect Item # or Description columns.');
-    sourceSearch.disabled = true;
-    sourceSearchBtn.disabled = true;
-    sourceClearBtn.disabled = true;
+  // Detect the header row by scanning the top section for a row containing Item#/Description/etc.
+  const headerPatterns = {
+    item: [/^item\s*#?$/i, /\bitem\b/i, /\bsku\b/i, /\bitem\s*no\b/i, /\bitem\s*number\b/i],
+    desc: [/\bdescription\b/i, /\bproduct\s*name\b/i],
+    haz:  [/\bhaz\b/i, /\bhaz\s*class\b/i, /haz[_\s-]*info/i],
+    insert: [/\binsert\b/i],
+    bottle: [/\bbottle\s*label\b/i, /\blabel\s*id\b/i, /\blabel\b/i],
+    box: [/\bbox\s*label\b/i, /\bcase\s*label\b/i],
+    closure: [/\bclosure\b/i],
+    pack: [/\bpack\b/i]
+  };
+
+  let headerRowIdx = -1;
+  let headerScoreBest = -1;
+
+  for (let r = 0; r < Math.min(60, aoa.length); r++) {
+    const row = aoa[r] || [];
+    let nonEmpty = 0;
+    let hits = { item: 0, desc: 0, haz: 0, insert: 0, bottle: 0, box: 0, closure: 0, pack: 0 };
+
+    for (let c = 0; c < row.length; c++) {
+      const cell = normCell(row[c]);
+      if (!cell) continue;
+      nonEmpty++;
+      for (const k of Object.keys(hits)) {
+        if (isMatch(cell, headerPatterns[k])) hits[k]++;
+      }
+    }
+
+    // Require at least item+description-like signals.
+    const hasItem = hits.item > 0;
+    const hasDesc = hits.desc > 0;
+    if (!hasItem || !hasDesc) continue;
+
+    // Prefer rows with more header hits + many filled cells.
+    const score =
+      (hits.item + hits.desc) * 50 +
+      (hits.haz + hits.insert + hits.bottle + hits.box + hits.closure + hits.pack) * 10 +
+      nonEmpty;
+
+    if (score > headerScoreBest) {
+      headerScoreBest = score;
+      headerRowIdx = r;
+    }
+  }
+
+  if (headerRowIdx < 0) {
+    setSourceStatus('Source sheet loaded, but could not find a header row (expected columns like "Item#", "Description").');
+    sourceSearch.disabled = false;
+    sourceSearchBtn.disabled = false;
+    sourceClearBtn.disabled = false;
     return;
   }
 
-  sourceRecords = rows.map(r => {
-    const itemNumber = safeStr(itemKey ? r[itemKey] : "");
-    const description = safeStr(descKey ? r[descKey] : "");
-    const hazInfo = normalizeHaz(hazKey ? r[hazKey] : "");
-    const insertInfo = safeStr(insertKey ? r[insertKey] : "");
-    const labelLocation = safeStr(bottleLabelKey ? r[bottleLabelKey] : "");
-    const boxLabelLocation = safeStr(boxLabelKey ? r[boxLabelKey] : "");
-    const closureType = safeStr(closureKey ? r[closureKey] : "");
-    const packType = safeStr(packKey ? r[packKey] : "");
+  const headerRow = aoa[headerRowIdx] || [];
+  const findCol = (patterns) => {
+    for (let c = 0; c < headerRow.length; c++) {
+      const cell = normCell(headerRow[c]);
+      if (!cell) continue;
+      if (isMatch(cell, patterns)) return c;
+    }
+    return -1;
+  };
 
-    const searchText = `${itemNumber} ${description}`.toLowerCase();
+  const itemCol = findCol(headerPatterns.item);
+  const descCol = findCol(headerPatterns.desc);
+  const hazCol = findCol(headerPatterns.haz);
+  const insertCol = findCol(headerPatterns.insert);
+  const bottleCol = findCol([/\bbottle\s*label\b/i, /\bbottle\s*label\s*location\b/i, /\bbottle\s*label\s*loc\b/i, /\blabel\s*location\b/i, /\bbottle\s*label\b/i]);
+  const boxCol = findCol([/\bbox\s*label\b/i, /\bbox\s*label\s*location\b/i, /\bcase\s*label\b/i]);
+  const closureCol = findCol([/\bclosure\s*type\b/i, /\bclosure\b/i]);
+  const packCol = findCol([/\bpack\s*type\b/i, /\bpack\b/i]);
 
-    return {
+  if (itemCol < 0 || descCol < 0) {
+    setSourceStatus('Source sheet header found, but missing Item#/Description columns.');
+    sourceSearch.disabled = false;
+    sourceSearchBtn.disabled = false;
+    sourceClearBtn.disabled = false;
+    return;
+  }
+
+  const recs = [];
+  for (let r = headerRowIdx + 1; r < aoa.length; r++) {
+    const row = aoa[r] || [];
+    const itemNumber = safeStr(row[itemCol]);
+    const description = safeStr(row[descCol]);
+    if (!itemNumber && !description) continue;
+
+    const hazInfo = normalizeHaz(hazCol >= 0 ? row[hazCol] : "");
+    const insertInfo = safeStr(insertCol >= 0 ? row[insertCol] : "");
+    const labelLocation = safeStr(bottleCol >= 0 ? row[bottleCol] : "");
+    const boxLabelLocation = safeStr(boxCol >= 0 ? row[boxCol] : "");
+    const closureType = safeStr(closureCol >= 0 ? row[closureCol] : "");
+    const packType = safeStr(packCol >= 0 ? row[packCol] : "");
+
+    recs.push({
       itemNumber,
       description,
       hazInfo,
@@ -1042,9 +1079,11 @@ function loadSourceSheet() {
       boxLabelLocation,
       closureType,
       packType,
-      _searchText: searchText
-    };
-  }).filter(r => r.itemNumber || r.description);
+      _searchText: `${itemNumber} ${description}`.toLowerCase()
+    });
+  }
+
+  sourceRecords = recs;
 
   sourceReady = true;
   sourceSearch.disabled = false;
