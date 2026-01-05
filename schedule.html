@@ -211,9 +211,14 @@
       font-size:15px;
     }
     .pick-wrap{
-      display:flex;
+      display:inline-flex;
       align-items:center;
-      gap:10px;
+      gap:6px;
+      max-width:100%;
+    }
+    .pick-text{
+      display:inline-block;
+      max-width:100%;
     }
     .pick-checkbox{
       width:18px;
@@ -813,9 +818,10 @@ function renderCleanRows(rows, dayName) {
         }
       });
       const bottleText = document.createElement("span");
+      bottleText.className = "pick-text";
       bottleText.textContent = row["Bottle Label Location"] ?? "";
-      bottleWrap.appendChild(bottleCb);
       bottleWrap.appendChild(bottleText);
+      bottleWrap.appendChild(bottleCb);
       tdBottle.appendChild(bottleWrap);
       tr.appendChild(tdBottle);
 
@@ -842,9 +848,10 @@ function renderCleanRows(rows, dayName) {
         }
       });
       const boxText = document.createElement("span");
+      boxText.className = "pick-text";
       boxText.textContent = row["Box Label Location"] ?? "";
-      boxWrap.appendChild(boxCb);
       boxWrap.appendChild(boxText);
+      boxWrap.appendChild(boxCb);
       tdBox.appendChild(boxWrap);
       tr.appendChild(tdBox);
 
