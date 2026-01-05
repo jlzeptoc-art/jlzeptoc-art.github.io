@@ -210,6 +210,17 @@
       border-bottom:3px solid var(--line-accent);
       font-size:15px;
     }
+    .pick-wrap{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .pick-checkbox{
+      width:18px;
+      height:18px;
+      flex:0 0 auto;
+      accent-color: var(--accent);
+    }
     .small{font-size:11px;color:var(--muted)}
     .footer-info{
       display:flex;
@@ -333,6 +344,7 @@
         padding:6px 8px;
         font-size:11px;
       }
+      .pick-checkbox{display:none !important}
       .line-header{
         background:#ebf8ff !important;
         color:#1e3a8a !important;
@@ -438,6 +450,10 @@
 // Configuration: Set the XLSX file path here
 const XLSX_FILE_PATH = 'Production Schedule Q1-Q2 2026.xlsx';
 
+// Optional shared storage for "picked" checkboxes (Google Apps Script Web App URL).
+// If blank, the picked state is saved only on the current device/browser.
+const PICK_STATUS_ENDPOINT = '';
+
 // State
 let workbook = null;
 let allSheetNames = [];
@@ -445,6 +461,9 @@ let sheetNames = []; // schedule day sheets only (for dropdown)
 let cleanRows = [];
 let sourceRecords = [];
 let sourceReady = false;
+
+// Pick status cache (per day sheet)
+let pickState = new Map(); // key -> boolean
 
 // DOM
 const $ = (id) => document.getElementById(id);
@@ -502,6 +521,74 @@ function pickHeader(keys, regexList) {
     if (hit) return hit.orig;
   }
   return null;
+}
+
+function hashKey(str) {
+  // FNV-1a 32-bit
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  // unsigned to base36 for shorter keys
+  return (h >>> 0).toString(36);
+}
+
+function makePickKey(dayName, row, kind) {
+  const raw = `${dayName}|${row.Line}|${row["SKU#"]}|${row.Description}|${kind}`;
+  return `pick:${hashKey(raw)}`;
+}
+
+function localPickStorageKey(key) {
+  return `maintex:schedule:picks:v1:${key}`;
+}
+
+async function pickBulkGet(keys) {
+  // Returns Map(key -> boolean)
+  const out = new Map();
+  if (!keys.length) return out;
+
+  // Remote (shared) mode
+  if (PICK_STATUS_ENDPOINT) {
+    try {
+      const resp = await fetch(PICK_STATUS_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "bulkGet", keys })
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const values = data?.values || {};
+      for (const k of keys) out.set(k, Boolean(values[k]));
+      return out;
+    } catch (e) {
+      console.warn("Pick bulkGet failed, falling back to local storage.", e);
+      // fall through to local
+    }
+  }
+
+  // Local fallback
+  for (const k of keys) {
+    const v = localStorage.getItem(localPickStorageKey(k));
+    out.set(k, v === "1");
+  }
+  return out;
+}
+
+async function pickSet(key, value) {
+  // Remote (shared) mode
+  if (PICK_STATUS_ENDPOINT) {
+    const resp = await fetch(PICK_STATUS_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "set", key, value: Boolean(value) })
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return;
+  }
+
+  // Local fallback
+  localStorage.setItem(localPickStorageKey(key), value ? "1" : "0");
 }
 
 // Get today's date in MM-DD format for sheet matching
@@ -622,7 +709,7 @@ function findTodaySheet(names) {
 }
 
 // Render clean table grouped by Line
-function renderCleanRows(rows) {
+function renderCleanRows(rows, dayName) {
   const tbody = cleanTable.querySelector("tbody");
   tbody.innerHTML = "";
   if (rows.length === 0) {
@@ -663,15 +750,84 @@ function renderCleanRows(rows) {
     // Add data rows for this line
     for (const row of lineRows) {
       const tr = document.createElement("tr");
-      const cells = [
-        row.Description, row["SKU#"], row.Ordered,
-        row.Haz_Info, row["Bottle Label Location"], row["Box Label Location"]
-      ];
-      for (const v of cells) {
-        const td = document.createElement("td");
-        td.textContent = v == null ? "" : String(v);
-        tr.appendChild(td);
-      }
+      // Description
+      const tdDesc = document.createElement("td");
+      tdDesc.textContent = row.Description ?? "";
+      tr.appendChild(tdDesc);
+
+      // SKU#
+      const tdSku = document.createElement("td");
+      tdSku.textContent = row["SKU#"] ?? "";
+      tr.appendChild(tdSku);
+
+      // Ordered
+      const tdOrd = document.createElement("td");
+      tdOrd.textContent = row.Ordered == null ? "" : String(row.Ordered);
+      tr.appendChild(tdOrd);
+
+      // Haz_Info
+      const tdHaz = document.createElement("td");
+      tdHaz.textContent = row.Haz_Info ?? "";
+      tr.appendChild(tdHaz);
+
+      // Bottle Label Location + picked checkbox
+      const bottleKey = makePickKey(dayName, row, "bottle");
+      const tdBottle = document.createElement("td");
+      const bottleWrap = document.createElement("div");
+      bottleWrap.className = "pick-wrap";
+      const bottleCb = document.createElement("input");
+      bottleCb.type = "checkbox";
+      bottleCb.className = "pick-checkbox";
+      bottleCb.checked = Boolean(pickState.get(bottleKey));
+      bottleCb.setAttribute("aria-label", "Bottle label picked");
+      bottleCb.addEventListener("change", async () => {
+        const next = bottleCb.checked;
+        pickState.set(bottleKey, next);
+        try {
+          await pickSet(bottleKey, next);
+        } catch (e) {
+          console.error(e);
+          pickState.set(bottleKey, !next);
+          bottleCb.checked = !next;
+          alert("Could not save picked status. Please try again.");
+        }
+      });
+      const bottleText = document.createElement("span");
+      bottleText.textContent = row["Bottle Label Location"] ?? "";
+      bottleWrap.appendChild(bottleCb);
+      bottleWrap.appendChild(bottleText);
+      tdBottle.appendChild(bottleWrap);
+      tr.appendChild(tdBottle);
+
+      // Box Label Location + picked checkbox
+      const boxKey = makePickKey(dayName, row, "box");
+      const tdBox = document.createElement("td");
+      const boxWrap = document.createElement("div");
+      boxWrap.className = "pick-wrap";
+      const boxCb = document.createElement("input");
+      boxCb.type = "checkbox";
+      boxCb.className = "pick-checkbox";
+      boxCb.checked = Boolean(pickState.get(boxKey));
+      boxCb.setAttribute("aria-label", "Box label picked");
+      boxCb.addEventListener("change", async () => {
+        const next = boxCb.checked;
+        pickState.set(boxKey, next);
+        try {
+          await pickSet(boxKey, next);
+        } catch (e) {
+          console.error(e);
+          pickState.set(boxKey, !next);
+          boxCb.checked = !next;
+          alert("Could not save picked status. Please try again.");
+        }
+      });
+      const boxText = document.createElement("span");
+      boxText.textContent = row["Box Label Location"] ?? "";
+      boxWrap.appendChild(boxCb);
+      boxWrap.appendChild(boxText);
+      tdBox.appendChild(boxWrap);
+      tr.appendChild(tdBox);
+
       tbody.appendChild(tr);
     }
   }
