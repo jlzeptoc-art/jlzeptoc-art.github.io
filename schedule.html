@@ -257,13 +257,14 @@
         overflow:visible;
       }
       header, .controls, .status, .footer-info{display:none !important}
+      .source-panel{display:none !important}
       main{
         padding:0;
         margin:0;
         width:100%;
         height:100%;
       }
-      .panel{
+      .schedule-panel{
         border:none;
         box-shadow:none;
         background:transparent;
@@ -356,7 +357,39 @@
 </header>
 
 <main>
-  <div class="panel">
+  <div class="panel controls">
+    <select id="daySelect" disabled></select>
+    <button id="btnPrint" disabled>Print</button>
+  </div>
+
+  <div class="panel schedule-panel">
+    <div class="printHeader">
+      <div>
+        <h2 class="printTitle" id="printTitle" style="margin:0 0 4px 0; font-size:16px;">
+          Production Schedule
+        </h2>
+        <span class="printDate" id="printDate">—</span>
+      </div>
+      <span class="printShift" id="printShift">—</span>
+    </div>
+    <div class="tableWrap">
+      <table id="cleanTable">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>SKU#</th>
+            <th>Ordered</th>
+            <th>Haz_Info</th>
+            <th>Bottle Label Location</th>
+            <th>Box Label Location</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel source-panel">
     <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;">
       <div>
         <div style="font-weight:700; font-size:16px; margin-bottom:4px;">Search Source</div>
@@ -383,38 +416,6 @@
             <th>Box Label Location</th>
             <th>Closure Type</th>
             <th>Pack Type</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="panel controls">
-    <select id="daySelect" disabled></select>
-    <button id="btnPrint" disabled>Print</button>
-  </div>
-
-  <div class="panel">
-    <div class="printHeader">
-      <div>
-        <h2 class="printTitle" id="printTitle" style="margin:0 0 4px 0; font-size:16px;">
-          Production Schedule
-        </h2>
-        <span class="printDate" id="printDate">—</span>
-      </div>
-      <span class="printShift" id="printShift">—</span>
-    </div>
-    <div class="tableWrap">
-      <table id="cleanTable">
-        <thead>
-          <tr>
-            <th>Description</th>
-            <th>SKU#</th>
-            <th>Ordered</th>
-            <th>Haz_Info</th>
-            <th>Bottle Label Location</th>
-            <th>Box Label Location</th>
           </tr>
         </thead>
         <tbody></tbody>
