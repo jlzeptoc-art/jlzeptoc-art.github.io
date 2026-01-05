@@ -390,7 +390,7 @@
           <tr>
             <th>Description</th>
             <th>SKU#</th>
-            <th>Ordered</th>
+            <th>Ordered (UOM)</th>
             <th>Haz_Info</th>
             <th>Bottle Label Location</th>
             <th>Box Label Location</th>
@@ -537,6 +537,24 @@ function hashKey(str) {
 function makePickKey(dayName, row, kind) {
   const raw = `${dayName}|${row.Line}|${row["SKU#"]}|${row.Description}|${kind}`;
   return `pick:${hashKey(raw)}`;
+}
+
+function lineNumberFromLabel(lineLabel) {
+  const m = String(lineLabel ?? "").match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function uomForScheduleRow(row) {
+  const lineNum = lineNumberFromLabel(row.Line);
+  if ([1, 2, 3, 4, 6, 7].includes(lineNum)) return "CS";
+  if (lineNum === 5) {
+    const d = String(row.Description ?? "").toLowerCase();
+    // Best-effort separation for Line 5
+    if (d.includes("drum") || /\bdr\b/.test(d)) return "DR";
+    if (d.includes("pail") || /\bpl\b/.test(d)) return "PL";
+    return "EA";
+  }
+  return "";
 }
 
 function localPickStorageKey(key) {
@@ -762,7 +780,9 @@ function renderCleanRows(rows, dayName) {
 
       // Ordered
       const tdOrd = document.createElement("td");
-      tdOrd.textContent = row.Ordered == null ? "" : String(row.Ordered);
+      const uom = uomForScheduleRow(row);
+      const ord = row.Ordered == null ? "" : String(row.Ordered);
+      tdOrd.textContent = ord ? (uom ? `${ord} ${uom}` : ord) : "";
       tr.appendChild(tdOrd);
 
       // Haz_Info
@@ -1008,7 +1028,7 @@ function build() {
   $("printDate").textContent = formattedDate;
   $("printShift").textContent = shift;
 
-  renderCleanRows(cleanRows);
+  renderCleanRows(cleanRows, dayName);
   btnPrint.disabled = cleanRows.length === 0;
 }
 
