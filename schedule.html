@@ -178,12 +178,14 @@
       width:100%;
       min-width:700px;
       background:white;
+      table-layout:fixed;
     }
     th, td{
       border-bottom:1px solid var(--border);
       padding:14px 16px;
       text-align:left;
       font-size:13px;
+      overflow-wrap:anywhere;
     }
     th{
       position:sticky;
@@ -213,20 +215,32 @@
       font-size:15px;
     }
     .pick-wrap{
-      display:inline-flex;
+      display:flex;
       align-items:center;
-      gap:6px;
-      max-width:100%;
+      justify-content:space-between;
+      gap:8px;
+      flex-wrap:nowrap;
+      width:100%;
     }
     .pick-text{
-      display:inline-block;
-      max-width:100%;
+      flex:1 1 auto;
+      min-width:0;
     }
     .pick-checkbox{
       width:18px;
       height:18px;
       flex:0 0 auto;
       accent-color: var(--accent);
+    }
+
+    /* Mobile/tablet: keep everything on-page (no horizontal scroll) */
+    @media (max-width: 900px){
+      main{padding:20px 16px;}
+      .controls{padding:14px;}
+      table{min-width:0;}
+      th, td{padding:10px 10px; font-size:12px;}
+      th{font-size:11px;}
+      input{min-width:220px;}
     }
     .small{font-size:11px;color:var(--muted)}
     .footer-info{
