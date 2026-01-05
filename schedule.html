@@ -296,31 +296,31 @@
         width:100%;
       }
       table{
-        background:rgba(15,23,48,.65);
+        background:white;
         width:100%;
         min-width:0;
         font-size:11px;
       }
       th{
-        background:rgba(17,26,51,.95);
-        color:var(--muted);
-        border-bottom:1px solid rgba(255,255,255,.08);
+        background:#f8fafc;
+        color:#4a5568;
+        border-bottom:1px solid #cbd5e0;
         padding:6px 8px;
         font-size:11px;
         position:static;
       }
       td{
-        border-bottom:1px solid rgba(255,255,255,.08);
-        color:var(--text);
+        border-bottom:1px solid #e2e8f0;
+        color:#111827;
         padding:6px 8px;
         font-size:11px;
       }
       .line-header{
-        background:rgba(122,167,255,.25) !important;
-        color:var(--text) !important;
+        background:#ebf8ff !important;
+        color:#1e3a8a !important;
       }
       .line-header td{
-        border-bottom:2px solid rgba(122,167,255,.4);
+        border-bottom:2px solid rgba(66,153,225,.6);
         padding:8px;
         font-weight:600;
       }
@@ -442,16 +442,8 @@ function getTodaySheetFormat() {
 function detectShift(sheetName, dayAoa) {
   const nameLower = sheetName.toLowerCase();
   
-  // Check for PM (Second Shift) first
-  if (nameLower.includes('pm')) {
-    return 'Second Shift';
-  }
-  
-  // Check sheet name for shift indicators
-  if (nameLower.includes('first') || nameLower.includes('1st') || nameLower.includes('1')) {
-    return 'First Shift';
-  }
-  if (nameLower.includes('second') || nameLower.includes('2nd') || nameLower.includes('2')) {
+  // Workbook convention: "MM-DD" (first shift) vs "MM-DD PM"/"MM-DDpm" (second shift)
+  if (/\bpm\b/i.test(sheetName) || /pm$/i.test(sheetName.trim())) {
     return 'Second Shift';
   }
   
@@ -493,7 +485,7 @@ function formatScheduleDate(sheetName) {
       const date = new Date(year, month - 1, day);
       const dayOfWeek = dayNames[date.getDay()];
       
-      return `${dayOfWeek}, ${monthNames[month - 1]} ${day}`;
+      return `${dayOfWeek}, ${monthNames[month - 1]} ${day}, ${year}`;
     }
   }
   return sheetName;
@@ -798,7 +790,8 @@ async function loadWorkbook() {
     
     const buf = await response.arrayBuffer();
     workbook = XLSX.read(buf, { type: "array" });
-    sheetNames = workbook.SheetNames || [];
+    // Only include schedule day sheets (e.g. "01-05" and "01-05 PM")
+    sheetNames = (workbook.SheetNames || []).filter((n) => /^\s*\d{1,2}-\d{1,2}/.test(String(n)));
 
     populateSheetSelects();
     daySelect.disabled = false;
