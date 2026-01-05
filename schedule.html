@@ -112,6 +112,19 @@
       font-weight:500;
       box-shadow:0 1px 2px rgba(0,0,0,.05);
     }
+    input{
+      border:1px solid var(--border);
+      background:white;
+      color:var(--text);
+      border-radius:8px;
+      padding:11px 18px;
+      outline:none;
+      font-size:14px;
+      transition:all 0.2s ease;
+      font-weight:500;
+      box-shadow:0 1px 2px rgba(0,0,0,.05);
+      min-width:320px;
+    }
     select{
       min-width:240px;
       cursor:pointer;
@@ -122,6 +135,10 @@
       padding-right:40px;
     }
     select:hover, select:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px rgba(49,130,206,.1);
+    }
+    input:hover, input:focus{
       border-color:var(--accent);
       box-shadow:0 0 0 3px rgba(49,130,206,.1);
     }
@@ -339,6 +356,40 @@
 </header>
 
 <main>
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:700; font-size:16px; margin-bottom:4px;">Search Source</div>
+        <div class="small">Search by Item Number or Description (from the <strong>Source</strong> tab).</div>
+      </div>
+      <div class="small" id="sourceSearchStatus" style="text-align:right;">Loading…</div>
+    </div>
+
+    <div class="controls" style="margin-top:16px;">
+      <input id="sourceSearch" type="text" placeholder="Type item number or description…" disabled />
+      <button id="sourceSearchBtn" disabled>Search</button>
+      <button id="sourceClearBtn" disabled style="background:white;color:var(--accent);border-color:var(--border);">Clear</button>
+    </div>
+
+    <div class="tableWrap">
+      <table id="sourceResultsTable">
+        <thead>
+          <tr>
+            <th>Item #</th>
+            <th>Description</th>
+            <th>Haz Info</th>
+            <th>Insert Info</th>
+            <th>Label Location</th>
+            <th>Box Label Location</th>
+            <th>Closure Type</th>
+            <th>Pack Type</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="panel controls">
     <select id="daySelect" disabled></select>
     <button id="btnPrint" disabled>Print</button>
@@ -388,8 +439,11 @@ const XLSX_FILE_PATH = 'Production Schedule Q1-Q2 2026.xlsx';
 
 // State
 let workbook = null;
-let sheetNames = [];
+let allSheetNames = [];
+let sheetNames = []; // schedule day sheets only (for dropdown)
 let cleanRows = [];
+let sourceRecords = [];
+let sourceReady = false;
 
 // DOM
 const $ = (id) => document.getElementById(id);
@@ -398,6 +452,11 @@ const btnPrint = $("btnPrint");
 const scheduleDate = $("scheduleDate");
 const shiftBadge = $("shiftBadge");
 const cleanTable = $("cleanTable");
+const sourceSearch = $("sourceSearch");
+const sourceSearchBtn = $("sourceSearchBtn");
+const sourceClearBtn = $("sourceClearBtn");
+const sourceResultsTable = $("sourceResultsTable");
+const sourceSearchStatus = $("sourceSearchStatus");
 
 // Helpers
 function normalizeHeader(s) {
@@ -428,6 +487,20 @@ function safeStr(v) {
 function pickSheetByNameLike(names, needle) {
   const n = needle.toLowerCase();
   return names.find(s => s.toLowerCase().includes(n));
+}
+
+function norm(s) {
+  return String(s ?? "").trim().toLowerCase();
+}
+
+function pickHeader(keys, regexList) {
+  const lowered = keys.map(k => ({ orig: k, low: norm(k) }));
+  for (const rx of regexList) {
+    const re = new RegExp(rx);
+    const hit = lowered.find(({ low }) => re.test(low));
+    if (hit) return hit.orig;
+  }
+  return null;
 }
 
 // Get today's date in MM-DD format for sheet matching
@@ -791,11 +864,15 @@ async function loadWorkbook() {
     const buf = await response.arrayBuffer();
     workbook = XLSX.read(buf, { type: "array" });
     // Only include schedule day sheets (e.g. "01-05" and "01-05 PM")
-    sheetNames = (workbook.SheetNames || []).filter((n) => /^\s*\d{1,2}-\d{1,2}/.test(String(n)));
+    allSheetNames = workbook.SheetNames || [];
+    sheetNames = allSheetNames.filter((n) => /^\s*\d{1,2}-\d{1,2}/.test(String(n)));
 
     populateSheetSelects();
     daySelect.disabled = false;
     
+    // Load Source sheet for search
+    loadSourceSheet();
+
     // Auto-build on load
     build();
   } catch (err) {
@@ -806,6 +883,192 @@ async function loadWorkbook() {
   }
 }
 
+function setSourceStatus(msg) {
+  if (!sourceSearchStatus) return;
+  sourceSearchStatus.textContent = msg || "";
+}
+
+function renderSourceResults(records) {
+  const tbody = sourceResultsTable.querySelector("tbody");
+  tbody.innerHTML = "";
+
+  if (!records.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--muted)">No results.</td></tr>';
+    return;
+  }
+
+  const maxRows = 200;
+  const shown = records.slice(0, maxRows);
+
+  for (const r of shown) {
+    const tr = document.createElement("tr");
+    const cells = [
+      r.itemNumber,
+      r.description,
+      r.hazInfo,
+      r.insertInfo,
+      r.labelLocation,
+      r.boxLabelLocation,
+      r.closureType,
+      r.packType
+    ];
+    for (const v of cells) {
+      const td = document.createElement("td");
+      td.textContent = v == null ? "" : String(v);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+
+  if (records.length > maxRows) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 8;
+    td.style.textAlign = "center";
+    td.style.padding = "14px";
+    td.style.color = "var(--muted)";
+    td.textContent = `Showing first ${maxRows} of ${records.length} matches. Refine your search to narrow results.`;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+}
+
+function normalizeHaz(value) {
+  const s = safeStr(value);
+  if (s === "0") return "";
+  return s;
+}
+
+function loadSourceSheet() {
+  sourceReady = false;
+  sourceRecords = [];
+  renderSourceResults([]);
+
+  if (!workbook) {
+    setSourceStatus("Source: workbook not loaded.");
+    return;
+  }
+
+  const sourceName =
+    allSheetNames.find(n => norm(n) === "source") ||
+    pickSheetByNameLike(allSheetNames, "source");
+
+  if (!sourceName || !workbook.Sheets[sourceName]) {
+    setSourceStatus('Source sheet not found (expected a tab named "Source").');
+    sourceSearch.disabled = true;
+    sourceSearchBtn.disabled = true;
+    sourceClearBtn.disabled = true;
+    return;
+  }
+
+  const ws = workbook.Sheets[sourceName];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: true });
+  if (!rows.length) {
+    setSourceStatus('Source sheet is empty.');
+    sourceSearch.disabled = true;
+    sourceSearchBtn.disabled = true;
+    sourceClearBtn.disabled = true;
+    return;
+  }
+
+  const keys = Object.keys(rows[0] || {});
+  const itemKey = pickHeader(keys, [
+    "\\bitem\\s*#\\b",
+    "\\bitem\\s*no\\b",
+    "\\bitem\\s*number\\b",
+    "\\bsku\\b",
+    "\\bformula\\b",
+    "\\bproduct\\s*(no|num|number)\\b"
+  ]);
+  const descKey = pickHeader(keys, [
+    "\\bdescription\\b",
+    "\\bproduct\\s*name\\b",
+    "\\bname\\b"
+  ]);
+  const hazKey = pickHeader(keys, [
+    "haz[_\\s-]*info",
+    "\\bhaz\\b",
+    "\\bhazmat\\b"
+  ]);
+  const insertKey = pickHeader(keys, [
+    "\\binsert\\s*info\\b",
+    "\\binsert\\b"
+  ]);
+  const bottleLabelKey = pickHeader(keys, [
+    "bottle\\s*label\\s*location",
+    "label\\s*location",
+    "bottle\\s*label"
+  ]);
+  const boxLabelKey = pickHeader(keys, [
+    "box\\s*label\\s*location",
+    "case\\s*label\\s*location",
+    "box\\s*label"
+  ]);
+  const closureKey = pickHeader(keys, [
+    "closure\\s*type",
+    "\\bclosure\\b"
+  ]);
+  const packKey = pickHeader(keys, [
+    "pack\\s*type",
+    "\\bpack\\b"
+  ]);
+
+  if (!itemKey && !descKey) {
+    setSourceStatus('Source sheet loaded, but could not detect Item # or Description columns.');
+    sourceSearch.disabled = true;
+    sourceSearchBtn.disabled = true;
+    sourceClearBtn.disabled = true;
+    return;
+  }
+
+  sourceRecords = rows.map(r => {
+    const itemNumber = safeStr(itemKey ? r[itemKey] : "");
+    const description = safeStr(descKey ? r[descKey] : "");
+    const hazInfo = normalizeHaz(hazKey ? r[hazKey] : "");
+    const insertInfo = safeStr(insertKey ? r[insertKey] : "");
+    const labelLocation = safeStr(bottleLabelKey ? r[bottleLabelKey] : "");
+    const boxLabelLocation = safeStr(boxLabelKey ? r[boxLabelKey] : "");
+    const closureType = safeStr(closureKey ? r[closureKey] : "");
+    const packType = safeStr(packKey ? r[packKey] : "");
+
+    const searchText = `${itemNumber} ${description}`.toLowerCase();
+
+    return {
+      itemNumber,
+      description,
+      hazInfo,
+      insertInfo,
+      labelLocation,
+      boxLabelLocation,
+      closureType,
+      packType,
+      _searchText: searchText
+    };
+  }).filter(r => r.itemNumber || r.description);
+
+  sourceReady = true;
+  sourceSearch.disabled = false;
+  sourceSearchBtn.disabled = false;
+  sourceClearBtn.disabled = false;
+
+  setSourceStatus(`Source loaded (${sourceRecords.length} rows).`);
+}
+
+function runSourceSearch() {
+  if (!sourceReady) return;
+  const q = safeStr(sourceSearch.value);
+  if (!q) {
+    setSourceStatus(`Source loaded (${sourceRecords.length} rows).`);
+    renderSourceResults([]);
+    return;
+  }
+
+  const needle = q.toLowerCase();
+  const hits = sourceRecords.filter(r => r._searchText.includes(needle));
+  setSourceStatus(`Found ${hits.length} result(s) for “${q}”.`);
+  renderSourceResults(hits);
+}
+
 // Event listeners
 daySelect.addEventListener("change", () => {
   if (!workbook) return;
@@ -813,6 +1076,16 @@ daySelect.addEventListener("change", () => {
 });
 
 btnPrint.addEventListener("click", () => { if (cleanRows.length) window.print(); });
+
+sourceSearchBtn.addEventListener("click", runSourceSearch);
+sourceSearch.addEventListener("keyup", (e) => { if (e.key === "Enter") runSourceSearch(); });
+sourceClearBtn.addEventListener("click", () => {
+  sourceSearch.value = "";
+  if (!sourceReady) return;
+  setSourceStatus(`Source loaded (${sourceRecords.length} rows).`);
+  renderSourceResults([]);
+  sourceSearch.focus();
+});
 
 // Initialize
 loadWorkbook();
