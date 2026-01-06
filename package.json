@@ -1,0 +1,25 @@
+{
+  "name": "maintex-internal-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Internal tools site with protected production schedule.",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "NODE_ENV=development node server/index.js",
+    "hash-password": "node server/scripts/hash-password.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "express-session": "^1.18.2",
+    "googleapis": "^159.0.0",
+    "helmet": "^8.1.0"
+  }
+}
+

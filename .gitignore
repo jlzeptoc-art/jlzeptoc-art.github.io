@@ -1,0 +1,23 @@
+.env
+.env.*
+*.local
+
+# Credentials
+service-account.json
+**/service-account.json
+
+# Dependencies
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS / editor
+.DS_Store
+
+# Sensitive business files
+private/
+*.xlsx

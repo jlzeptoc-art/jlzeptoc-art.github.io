@@ -668,6 +668,7 @@
       <div class="muted" style="font-size:13px;">App made by <strong>J.L.</strong></div>
       <div class="footer-nav" style="margin-top:8px;">
         <a href="index.html">Product Weight Calculator</a>
+        <a href="/logout">Logout</a>
       </div>
     </div>
     <img src="maintex-logo.jpg" alt="Maintex Logo">
@@ -675,9 +676,10 @@
 </main>
 
 <script>
-// XLSX workbook to load (must be served alongside this page).
-// Note: the actual filename contains spaces, so we URI-encode it for fetch().
-const XLSX_FILE_PATH = encodeURI("Production Schedule Q1-Q2 2026.xlsx");
+// XLSX workbook to load (protected endpoint; served only after login).
+const XLSX_FILE_PATH = "/api/production-schedule.xlsx";
+// Used only to format the header date (sheet tabs are MM-DD / MM-DD PM).
+const SCHEDULE_YEAR = 2026;
 
 // State
 let workbook = null;
@@ -828,12 +830,8 @@ function formatScheduleDate(sheetName) {
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
     if (month >= 1 && month <= 12) {
-      // Try to determine year - check if workbook name has year, otherwise use current year
-      let year = new Date().getFullYear();
-      const workbookYearMatch = XLSX_FILE_PATH.match(/202[4-9]/);
-      if (workbookYearMatch) {
-        year = parseInt(workbookYearMatch[0]);
-      }
+      // Fixed schedule year (update this when the schedule workbook year changes)
+      const year = Number.isFinite(SCHEDULE_YEAR) ? SCHEDULE_YEAR : new Date().getFullYear();
       
       // Create date object to get day of week
       const date = new Date(year, month - 1, day);
@@ -1433,7 +1431,7 @@ async function loadWorkbook() {
     console.error(err);
     scheduleDate.textContent = "Error loading file";
     shiftBadge.textContent = "—";
-    alert(`Error loading file: ${err.message}. Make sure "${XLSX_FILE_PATH}" exists in the same directory.`);
+    alert(`Error loading schedule: ${err.message}. Contact management if access is needed.`);
   }
 }
 
