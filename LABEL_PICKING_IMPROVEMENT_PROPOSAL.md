@@ -60,9 +60,8 @@ Conservative estimate (can validate in pilot):
 - **Confirm owner** for schedule source (local XLSX vs Google Sheet link)
 
 ### Contact
-- **J.L.** — Lean Manufacturing Specialist  
-- **Email**: _[add your email]_  
-- **Phone**: _[add your phone]_  
+- **Josué Luna.** — Lean Manufacturing Specialist  
+- **Email**: _ jluna@maintex.com  
 
 ### Appendix: Feature comparison (at-a-glance)
 | Area | Current (Paper) | Proposed (Digital) |
