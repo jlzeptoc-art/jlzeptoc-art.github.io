@@ -627,25 +627,9 @@
 </main>
 
 <script>
-const DATA_URL = "https://github.com/jlzeptoc-art/jlzeptoc-art.github.io/blob/bc9d0bc9728a274c8b5db415f2464a97e6a11750/schedule.html";
-
-// Optional: force year used for weekday formatting (MM-DD -> weekday). Leave null to auto-detect.
-const SCHEDULE_YEAR_OVERRIDE = null;
-
-const DEBUG = false;
-
-function getScheduleDataUrl() {
-  return (SCHEDULE_XLSX_URL && String(SCHEDULE_XLSX_URL).trim())
-    ? String(SCHEDULE_XLSX_URL).trim()
-    : SCHEDULE_XLSX_LOCAL_PATH;
-}
-
-function getScheduleYear() {
-  if (Number.isInteger(SCHEDULE_YEAR_OVERRIDE)) return SCHEDULE_YEAR_OVERRIDE;
-  const src = getScheduleDataUrl();
-  const m = String(src).match(/\b(20\d{2})\b/);
-  return m ? parseInt(m[1], 10) : new Date().getFullYear();
-}
+// XLSX workbook to load (must be served alongside this page).
+// Note: the actual filename contains spaces, so we URI-encode it for fetch().
+const XLSX_FILE_PATH = encodeURI("Production Schedule Q1-Q2 2026.xlsx");
 
 // State
 let workbook = null;
