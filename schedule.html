@@ -627,8 +627,31 @@
 </main>
 
 <script>
-// Configuration: Set the XLSX file path here
-const XLSX_FILE_PATH = 'Production Schedule Q1-Q2 2026.xlsx';
+/* ---------- CONFIG: schedule data source (easy to update) ---------- */
+// Option A (default): load local XLSX shipped with this site
+const SCHEDULE_XLSX_LOCAL_PATH = "Production Schedule Q1-Q2 2026.xlsx";
+
+// Option B: load from a Google Sheet export link (xlsx). Leave blank to use local file.
+// Example: "https://docs.google.com/spreadsheets/d/<SHEET_ID>/export?format=xlsx"
+const SCHEDULE_XLSX_URL = "";
+
+// Optional: force year used for weekday formatting (MM-DD -> weekday). Leave null to auto-detect.
+const SCHEDULE_YEAR_OVERRIDE = null;
+
+const DEBUG = false;
+
+function getScheduleDataUrl() {
+  return (SCHEDULE_XLSX_URL && String(SCHEDULE_XLSX_URL).trim())
+    ? String(SCHEDULE_XLSX_URL).trim()
+    : SCHEDULE_XLSX_LOCAL_PATH;
+}
+
+function getScheduleYear() {
+  if (Number.isInteger(SCHEDULE_YEAR_OVERRIDE)) return SCHEDULE_YEAR_OVERRIDE;
+  const src = getScheduleDataUrl();
+  const m = String(src).match(/\b(20\d{2})\b/);
+  return m ? parseInt(m[1], 10) : new Date().getFullYear();
+}
 
 // State
 let workbook = null;
@@ -684,16 +707,6 @@ function pickSheetByNameLike(names, needle) {
 
 function norm(s) {
   return String(s ?? "").trim().toLowerCase();
-}
-
-function pickHeader(keys, regexList) {
-  const lowered = keys.map(k => ({ orig: k, low: norm(k) }));
-  for (const rx of regexList) {
-    const re = new RegExp(rx);
-    const hit = lowered.find(({ low }) => re.test(low));
-    if (hit) return hit.orig;
-  }
-  return null;
 }
 
 function lineNumberFromLabel(lineLabel) {
