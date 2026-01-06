@@ -7,6 +7,12 @@ This repo now serves the **Production Schedule** through a **protected server en
 - **Before**: the schedule workbook was deployed as a static file. Anyone who could reach the site could download it directly.
 - **Now**: `/schedule` and `/api/production-schedule.xlsx` require login. The XLSX is fetched live from the Google Sheet so management edits show up immediately.
 
+### Access rules (what you asked for)
+
+- **Must be on the internal network (or VPN)**: requests are blocked unless the client IP is inside `ALLOWED_NETWORKS` (CIDR allowlist).
+- **Must sign in with a Maintex email**: Google OAuth login, restricted to `ALLOWED_EMAIL_DOMAINS`.
+- **Must have Drive access to the schedule**: the server exports the sheet using the *logged-in user’s* OAuth token, so Drive permissions are enforced automatically.
+
 ### Quick start (local)
 
 1) Install deps
@@ -16,9 +22,11 @@ npm install
 ```
 
 2) Create `.env` from `.env.example` and set:
-- `APP_USERS` (usernames + bcrypt hashes)
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI` (must match exactly)
 - `SCHEDULE_SPREADSHEET_ID` (already filled for your schedule)
-- Google credentials (`GOOGLE_SERVICE_ACCOUNT_JSON` or `GOOGLE_APPLICATION_CREDENTIALS`)
+- (optional) `ALLOWED_NETWORKS`, `ALLOWED_EMAIL_DOMAINS`
 
 3) Run
 
@@ -30,30 +38,29 @@ Open:
 - `http://localhost:3000/` (calculator)
 - `http://localhost:3000/schedule` (login required)
 
-### Creating users (approved people)
+### Google setup (Maintex email login)
 
-Generate a bcrypt hash:
+1) In Google Cloud Console:
+- Create an **OAuth 2.0 Client ID** (Application type: **Web application**)
+- Add **Authorized redirect URI** (example):  
+  `http://YOUR_SERVER_HOST:3000/auth/google/callback`
+2) Enable **Google Drive API** on the project
+3) In `.env`, set:
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI` (must match the redirect URI exactly)
 
-```bash
-npm run hash-password -- "SomeStrongPassword"
-```
+Users will only be able to view the schedule if their Google account already has access to the sheet in Drive.
 
-Then set `APP_USERS` in `.env` (JSON map of username -> hash), for example:
+### Network allowlist (internal only)
+
+Set `ALLOWED_NETWORKS` in `.env` to your internal subnets, for example:
 
 ```text
-APP_USERS={"manager":"$2a$12$...","supervisor":"$2a$12$..."}
+ALLOWED_NETWORKS=10.50.0.0/16,192.168.1.0/24
 ```
 
-### Google setup (recommended: keep sheet private)
-
-To keep the Google Sheet restricted (company-only) while still allowing the website to fetch it:
-
-1) Create a **Google Cloud service account**
-2) Enable the **Google Drive API**
-3) Download the service account JSON (or copy it into `GOOGLE_SERVICE_ACCOUNT_JSON`)
-4) Share the schedule Google Sheet with the **service account email** (Viewer is enough)
-
-The server will export the sheet as XLSX via Drive API on each request (with a short cache controlled by `SCHEDULE_CACHE_MS`).
+If you run behind nginx/reverse-proxy, set `TRUST_PROXY=1` so the app uses the real client IP from `X-Forwarded-For`.
 
 ### Important note about old exposures
 

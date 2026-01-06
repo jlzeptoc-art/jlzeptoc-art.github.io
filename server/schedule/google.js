@@ -14,25 +14,8 @@ function getSpreadsheetId() {
   );
 }
 
-async function getDriveClient() {
-  const jsonRaw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  const creds =
-    jsonRaw && jsonRaw.trim()
-      ? JSON.parse(jsonRaw)
-      : null;
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: creds || undefined,
-    // If credentials is undefined, google-auth-library will look at GOOGLE_APPLICATION_CREDENTIALS
-    scopes: ["https://www.googleapis.com/auth/drive.readonly"],
-  });
-
-  const client = await auth.getClient();
-  return google.drive({ version: "v3", auth: client });
-}
-
-async function exportViaDriveApiXlsx(spreadsheetId) {
-  const drive = await getDriveClient();
+async function exportViaDriveApiXlsxWithOAuth(oauth2Client, spreadsheetId) {
+  const drive = google.drive({ version: "v3", auth: oauth2Client });
   const resp = await drive.files.export(
     {
       fileId: spreadsheetId,
@@ -61,17 +44,21 @@ async function fetchPublicExportXlsx(spreadsheetId) {
   return Buffer.from(ab);
 }
 
-async function getProductionScheduleXlsx() {
+async function getProductionScheduleXlsx({ oauth2Client } = {}) {
   const spreadsheetId = getSpreadsheetId();
 
-  const source = String(process.env.SCHEDULE_SOURCE || "drive").toLowerCase();
+  const source = String(process.env.SCHEDULE_SOURCE || "user_oauth").toLowerCase();
 
   if (source === "public_export") {
     return await fetchPublicExportXlsx(spreadsheetId);
   }
 
-  // Default: Drive API (private sheet; share sheet with service-account email)
-  return await exportViaDriveApiXlsx(spreadsheetId);
+  // Default: Drive API with the LOGGED-IN user's OAuth token.
+  // This automatically enforces Drive permissions: if the user doesn't have access, export will fail.
+  if (!oauth2Client) {
+    throw new Error("Missing oauth2Client for SCHEDULE_SOURCE=user_oauth.");
+  }
+  return await exportViaDriveApiXlsxWithOAuth(oauth2Client, spreadsheetId);
 }
 
 module.exports = { getProductionScheduleXlsx };
