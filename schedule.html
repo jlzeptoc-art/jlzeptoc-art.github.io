@@ -19,6 +19,19 @@
       --line-accent:#4299e1;
       --line-bg:#ebf8ff;
       --hover:#f7fafc;
+
+      /* High-contrast schedule header badges (screen + print) */
+      --date-bg:#fde047;          /* amber */
+      --date-border:#f59e0b;
+      --date-text:#111827;
+
+      --shift-first-bg:#86efac;   /* green */
+      --shift-first-border:#22c55e;
+      --shift-first-text:#064e3b;
+
+      --shift-second-bg:#c4b5fd;  /* violet */
+      --shift-second-border:#8b5cf6;
+      --shift-second-text:#312e81;
     }
     *{box-sizing:border-box}
     body{
@@ -58,25 +71,40 @@
       flex-wrap:wrap;
     }
     .schedule-date{
-      font-size:16px;
-      color:rgba(255,255,255,.95);
-      font-weight:600;
-      background:rgba(255,255,255,.15);
-      padding:8px 16px;
-      border-radius:8px;
-      backdrop-filter:blur(10px);
+      font-size:18px;
+      color:var(--date-text);
+      font-weight:800;
+      background:var(--date-bg);
+      padding:10px 16px;
+      border-radius:999px;
+      border:2px solid var(--date-border);
+      box-shadow:0 4px 10px rgba(0,0,0,.18);
+      letter-spacing:-0.2px;
     }
     .shift-badge{
       display:inline-flex;
       align-items:center;
-      padding:8px 16px;
-      border-radius:8px;
-      font-size:13px;
-      font-weight:600;
-      background:rgba(255,255,255,.2);
-      border:1px solid rgba(255,255,255,.3);
-      color:white;
-      backdrop-filter:blur(10px);
+      padding:10px 16px;
+      border-radius:999px;
+      font-size:15px;
+      font-weight:800;
+      border:2px solid transparent;
+      box-shadow:0 4px 10px rgba(0,0,0,.18);
+      letter-spacing:-0.2px;
+      background:var(--shift-second-bg);
+      border-color:var(--shift-second-border);
+      color:var(--shift-second-text);
+      white-space:nowrap;
+    }
+    .shift-badge[data-shift="First Shift"]{
+      background:var(--shift-first-bg);
+      border-color:var(--shift-first-border);
+      color:var(--shift-first-text);
+    }
+    .shift-badge[data-shift="Second Shift"]{
+      background:var(--shift-second-bg);
+      border-color:var(--shift-second-border);
+      color:var(--shift-second-text);
     }
     main{
       padding:32px 40px;
@@ -394,6 +422,8 @@
         background:var(--bg);
         color:var(--text);
         overflow:visible;
+        -webkit-print-color-adjust:exact;
+        print-color-adjust:exact;
       }
       header, .controls, .status, .footer-info{display:none !important}
       .source-panel{display:none !important}
@@ -436,20 +466,38 @@
         color:var(--text);
       }
       .printHeader .printDate{
+        display:inline-flex;
+        align-items:center;
         font-size:14px;
-        color:var(--text);
-        font-weight:500;
+        font-weight:800;
+        color:var(--date-text);
+        background:var(--date-bg);
+        border:2px solid var(--date-border);
+        padding:6px 12px;
+        border-radius:999px;
+        letter-spacing:-0.1px;
       }
       .printHeader .printShift{
         display:inline-flex;
         align-items:center;
-        padding:4px 12px;
-        border-radius:16px;
-        font-size:12px;
-        font-weight:500;
-        background:rgba(122,167,255,.2);
-        border:1px solid rgba(122,167,255,.3);
-        color:var(--accent);
+        padding:6px 12px;
+        border-radius:999px;
+        font-size:13px;
+        font-weight:800;
+        background:var(--shift-second-bg);
+        border:2px solid var(--shift-second-border);
+        color:var(--shift-second-text);
+        letter-spacing:-0.1px;
+      }
+      .printHeader .printShift[data-shift="First Shift"]{
+        background:var(--shift-first-bg);
+        border-color:var(--shift-first-border);
+        color:var(--shift-first-text);
+      }
+      .printHeader .printShift[data-shift="Second Shift"]{
+        background:var(--shift-second-bg);
+        border-color:var(--shift-second-border);
+        color:var(--shift-second-text);
       }
       .tableWrap{
         border:none;
@@ -1349,10 +1397,12 @@ function build() {
   
   scheduleDate.textContent = formattedDate;
   shiftBadge.textContent = shift;
+  shiftBadge.dataset.shift = shift;
   
   // Update print header
   $("printDate").textContent = formattedDate;
   $("printShift").textContent = shift;
+  $("printShift").dataset.shift = shift;
 
   renderCleanRows(cleanRows, dayName);
   btnPrint.disabled = cleanRows.length === 0;
