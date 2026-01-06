@@ -318,6 +318,9 @@
       font-weight:600;
       margin-left:6px;
     }
+    .label-pickable .haz-badge{
+      margin-left:8px;
+    }
     .help-icon{
       display:inline-flex;
       align-items:center;
@@ -512,6 +515,7 @@
 
 <main>
   <div class="panel controls">
+    <label for="daySelect" style="font-weight:600; color:var(--text); font-size:14px; margin-right:4px;">Select Schedule:</label>
     <select id="daySelect" disabled></select>
     <button id="btnPrint" disabled>Print</button>
     <button id="btnClearPicked" disabled style="background:#dc2626;border-color:#dc2626;">Clear All Picked</button>
@@ -545,8 +549,9 @@
         <div class="subtext" id="progressBoxPct">0%</div>
       </div>
       <div class="progress-item">
-        <div class="label">Haz Labels Needed</div>
+        <div class="label">Haz Labels Picked</div>
         <div class="value" id="progressHaz">0</div>
+        <div class="subtext" id="progressHazPct">0%</div>
       </div>
     </div>
     
@@ -566,7 +571,7 @@
             <th>Description</th>
             <th>SKU#</th>
             <th>Ordered QTY</th>
-            <th>Haz Info</th>
+            <th>Haz Info <span class="help-icon" title="Tap to mark as picked">?</span></th>
             <th>Bottle Label Location <span class="help-icon" title="Tap to mark as picked. Quantity shown below.">?</span></th>
             <th>Box Label Location <span class="help-icon" title="Tap to mark as picked">?</span></th>
           </tr>
@@ -857,115 +862,105 @@ function findTodaySheet(names) {
   return null;
 }
 
-// Look up pack type from source records
-function getPackType(sku) {
-  if (!sourceReady || !sku) return null;
-  const skuNorm = String(sku).trim().toLowerCase();
-  const match = sourceRecords.find(r => 
-    String(r.itemNumber || "").trim().toLowerCase() === skuNorm
-  );
-  return match?.packType || null;
-}
-
-// Extract pack type from description (e.g., "4PK", "4/64oz", "6/cs")
-function extractPackTypeFromDescription(description) {
+// Extract pack type (bottles per case) from description only
+// Patterns: "4PK", "4/64oz", "4/64 oz", "6/cs", "2PK", "4/1", "4/64", etc.
+function extractBottlesPerCase(description) {
   if (!description) return null;
   const desc = String(description).trim();
   
-  // Pattern 1: XPK (e.g., "4PK", "2PK", "12PK")
-  const pkMatch = desc.match(/(\d+)PK/i);
+  // Pattern 1: XPK (e.g., "4PK", "2PK", "12PK") - X bottles per case
+  // Also match "4 PK" with space
+  const pkMatch = desc.match(/(\d+)\s*PK/i);
   if (pkMatch) {
-    return {
-      bottles: parseInt(pkMatch[1], 10),
-      cases: 1,
-      display: `${pkMatch[1]}PK`
-    };
+    return parseInt(pkMatch[1], 10);
   }
   
-  // Pattern 2: X/cs or X/CS (e.g., "6/cs", "4/CS")
-  const csMatch = desc.match(/(\d+)\s*\/\s*cs/i);
+  // Pattern 2: X/cs or X/CS or X/CS or X per case (e.g., "6/cs", "4/CS", "4 per case")
+  const csMatch = desc.match(/(\d+)\s*\/\s*cs/i) || desc.match(/(\d+)\s+per\s+case/i);
   if (csMatch) {
-    return {
-      bottles: parseInt(csMatch[1], 10),
-      cases: 1,
-      display: `${csMatch[1]}/cs`
-    };
+    return parseInt(csMatch[1], 10);
   }
   
-  // Pattern 3: X/Y where Y contains letters (e.g., "4/64oz", "4/64 oz", "2/32oz")
-  // This means X bottles per case, Y is the bottle size
-  const ozMatch = desc.match(/(\d+)\s*\/\s*(\d+)\s*(oz|fl\s*oz|ml|liter|gal|gallon)/i);
+  // Pattern 3: X/Yoz or X/Y oz (e.g., "4/64oz", "4/64 oz", "2/32oz", "4/64OZ", "4-64oz")
+  // This means X bottles per case, Y is the bottle size in oz
+  // Also match with dash: "4-64oz"
+  const ozMatch = desc.match(/(\d+)\s*[-\/]\s*(\d+)\s*(oz|OZ|fl\s*oz|ml|liter|gal|gallon)/i);
   if (ozMatch) {
-    return {
-      bottles: parseInt(ozMatch[1], 10),
-      cases: 1,
-      display: `${ozMatch[1]}/${ozMatch[2]}${ozMatch[3]}`
-    };
+    const num = parseInt(ozMatch[1], 10);
+    if (num >= 1 && num <= 24) return num;
   }
   
-  // Pattern 4: X/Y where Y is just a number (could be size, but if small number might be cases)
-  // Only use if Y is > 10 (likely a size) or if format is X/1 (explicit 1 case)
-  const numMatch = desc.match(/(\d+)\s*\/\s*(\d+)(?!\s*(oz|fl|ml|liter|gal|gallon|cs|pk))/i);
+  // Pattern 4: X/Y where Y is a number (could be size or cases)
+  // Try to be smart: if Y >= 8, likely a size (e.g., "4/64" = 4 bottles of 64oz)
+  // If Y = 1, it's X/1 CS format = X bottles per case
+  // Also match with dash: "4-64"
+  const numMatch = desc.match(/(\d+)\s*[-\/]\s*(\d+)(?!\s*(oz|OZ|fl|ml|liter|gal|gallon|cs|pk|PK|per))/i);
   if (numMatch) {
     const first = parseInt(numMatch[1], 10);
     const second = parseInt(numMatch[2], 10);
-    // If second number is 1, it's definitely X/1 CS format
-    if (second === 1) {
-      return {
-        bottles: first,
-        cases: 1,
-        display: `${first}/1`
-      };
+    
+    // If second number is 1, it's X/1 CS format = X bottles per case
+    if (second === 1 && first >= 1 && first <= 24) {
+      return first;
     }
-    // If second number is > 10, likely a size (e.g., "4/64" = 4 bottles of 64oz)
-    if (second > 10) {
-      return {
-        bottles: first,
-        cases: 1,
-        display: `${first}/${second}`
-      };
+    
+    // If second number is >= 8, likely a size (e.g., "4/64" = 4 bottles of 64oz per case)
+    // Common sizes: 8oz, 16oz, 32oz, 64oz, 128oz, etc.
+    if (second >= 8 && first >= 1 && first <= 24) {
+      return first;
+    }
+    
+    // If first is 1-12 and second is 2-7, check context
+    // If no "case" or "cs" context, likely size format
+    if (first >= 1 && first <= 12 && second >= 2 && second <= 7) {
+      const context = desc.toLowerCase();
+      // If there's no case/cs/pack context, treat as size (e.g., "4/32" = 4 bottles of 32oz)
+      if (!context.includes('case') && !context.includes('cs') && !context.includes('pack')) {
+        return first;
+      }
+    }
+  }
+  
+  // Pattern 5: Look for common pack type indicators in the description
+  // e.g., "4 pack", "6 pack", "12 pack" (though these are usually consumer packs)
+  // But also "4/1", "6/1" might appear as "4-1" or "4 1"
+  const packMatch = desc.match(/(\d+)\s*[- ]\s*1\s*(?:cs|case|pack)/i) || 
+                    desc.match(/(\d+)\s*\/\s*1\s*(?:cs|case|pack)/i);
+  if (packMatch) {
+    return parseInt(packMatch[1], 10);
+  }
+  
+  // Pattern 6: Just a number followed by certain keywords (e.g., "4 bottles", "6 per")
+  // This is less reliable, so we'll be conservative
+  const bottleMatch = desc.match(/(\d+)\s+(?:bottles?|per)/i);
+  if (bottleMatch) {
+    const num = parseInt(bottleMatch[1], 10);
+    // Only accept if it's a reasonable number (1-24)
+    if (num >= 1 && num <= 24) {
+      return num;
     }
   }
   
   return null;
 }
 
-// Parse pack type from various formats
-// Priority: 1) Source pack type, 2) Description extraction, 3) Direct string parsing
-function parsePackType(packTypeStr, description = null) {
-  if (!packTypeStr && !description) return null;
+// Calculate bottle label quantity from description only
+function calculateBottleLabels(caseQty, description) {
+  if (!caseQty || !description) return null;
   
-  // First try to parse from packTypeStr (from Source sheet)
-  if (packTypeStr) {
-    const str = String(packTypeStr).trim();
-    // Standard format: "4/1 CS" or "4/1"
-    const match = str.match(/(\d+)\s*\/\s*(\d+)/);
-    if (match) {
-      return {
-        bottles: parseInt(match[1], 10),
-        cases: parseInt(match[2], 10),
-        display: str
-      };
-    }
+  const bottlesPerCase = extractBottlesPerCase(description);
+  
+  // Debug: log when we can't find pack type (temporary for troubleshooting)
+  if (!bottlesPerCase && caseQty && String(description).trim()) {
+    console.log('⚠ No pack type found for:', description, '| Case Qty:', caseQty);
   }
   
-  // If packTypeStr didn't work, try extracting from description
-  if (description) {
-    const extracted = extractPackTypeFromDescription(description);
-    if (extracted) return extracted;
-  }
+  if (!bottlesPerCase) return null;
   
-  return null;
-}
-
-// Calculate bottle label quantity
-function calculateBottleLabels(caseQty, packType, description = null) {
-  if (!caseQty) return null;
-  const parsed = parsePackType(packType, description);
-  if (!parsed) return null;
   const caseNum = typeof caseQty === 'number' ? caseQty : parseFloat(String(caseQty).replace(/,/g, ''));
   if (!isFinite(caseNum)) return null;
-  return caseNum * parsed.bottles;
+  
+  return caseNum * bottlesPerCase;
 }
 
 // Update progress summary
@@ -984,22 +979,31 @@ function updateProgressSummary(rows, dayName) {
   let bottlePicked = 0;
   let boxPicked = 0;
   let hazNeeded = 0;
+  let hazPicked = 0;
   
   for (const row of rows) {
     if (isPicked(dayName, row, "bottle")) bottlePicked++;
     if (isPicked(dayName, row, "box")) boxPicked++;
-    if (row.Haz_Info && String(row.Haz_Info).trim() !== "") hazNeeded++;
+    if (row.Haz_Info && String(row.Haz_Info).trim() !== "") {
+      hazNeeded++;
+      if (isPicked(dayName, row, "haz")) hazPicked++;
+    }
   }
   
   const bottlePct = totalItems > 0 ? Math.round((bottlePicked / totalItems) * 100) : 0;
   const boxPct = totalItems > 0 ? Math.round((boxPicked / totalItems) * 100) : 0;
+  const hazPct = hazNeeded > 0 ? Math.round((hazPicked / hazNeeded) * 100) : 0;
   
   document.getElementById("progressTotal").textContent = totalItems;
   document.getElementById("progressBottle").textContent = `${bottlePicked} / ${totalItems}`;
   document.getElementById("progressBottlePct").textContent = `${bottlePct}% complete`;
   document.getElementById("progressBox").textContent = `${boxPicked} / ${totalItems}`;
   document.getElementById("progressBoxPct").textContent = `${boxPct}% complete`;
-  document.getElementById("progressHaz").textContent = hazNeeded;
+  document.getElementById("progressHaz").textContent = `${hazPicked} / ${hazNeeded}`;
+  const hazPctEl = document.getElementById("progressHazPct");
+  if (hazPctEl) {
+    hazPctEl.textContent = hazNeeded > 0 ? `${hazPct}% complete` : "";
+  }
 }
 
 // Render clean table grouped by Line
@@ -1064,30 +1068,57 @@ function renderCleanRows(rows, dayName) {
       const ordText = ord ? (uom ? `${ord} ${uom}` : ord) : "";
       tdOrd.textContent = ordText;
       
-      // Add bottle label calculation if we have pack type
-      const packType = getPackType(row["SKU#"]);
-      const bottleQty = calculateBottleLabels(ordNum, packType, row.Description);
+      // Add bottle label calculation from description only
+      const bottleQty = calculateBottleLabels(ordNum, row.Description);
       if (bottleQty && uom === "CS") {
         const calcDiv = document.createElement("div");
         calcDiv.className = "bottle-qty-calc";
-        const parsed = parsePackType(packType, row.Description);
         calcDiv.innerHTML = `<strong>${bottleQty}</strong> bottle labels needed`;
-        if (parsed) {
-          calcDiv.innerHTML += ` (${ord} cases × ${parsed.bottles} bottles/case)`;
-        }
         tdOrd.appendChild(calcDiv);
       }
       tr.appendChild(tdOrd);
 
-      // Haz_Info with badge
+      // Haz_Info with badge (tap to toggle picked highlight)
       const tdHaz = document.createElement("td");
       if (row.Haz_Info && String(row.Haz_Info).trim() !== "") {
-        tdHaz.textContent = row.Haz_Info;
+        const hazContainer = document.createElement("span");
+        hazContainer.className = "label-pickable";
+        hazContainer.setAttribute("role", "button");
+        hazContainer.setAttribute("tabindex", "0");
+        hazContainer.setAttribute("aria-label", "Toggle haz label picked");
+        
+        const hazText = document.createElement("span");
+        hazText.textContent = row.Haz_Info;
+        hazContainer.appendChild(hazText);
+        
         const hazBadge = document.createElement("span");
         hazBadge.className = "haz-badge";
         hazBadge.textContent = "⚠ HAZ";
         hazBadge.title = "Hazardous material - pick corrosive label";
-        tdHaz.appendChild(hazBadge);
+        hazContainer.appendChild(hazBadge);
+        
+        const hazApply = () => {
+          const picked = isPicked(dayName, row, "haz");
+          hazContainer.classList.toggle("label-picked", picked);
+        };
+        hazApply();
+        
+        const hazToggle = () => {
+          const next = !isPicked(dayName, row, "haz");
+          setPicked(dayName, row, "haz", next);
+          hazContainer.classList.toggle("label-picked", next);
+          updateProgressSummary(rows, dayName);
+        };
+        
+        hazContainer.addEventListener("click", hazToggle);
+        hazContainer.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            hazToggle();
+          }
+        });
+        
+        tdHaz.appendChild(hazContainer);
       }
       tr.appendChild(tdHaz);
 
@@ -1357,11 +1388,6 @@ async function loadWorkbook() {
 
     // Auto-build on load
     build();
-    
-    // Update progress when source data loads
-    if (sourceReady) {
-      setTimeout(() => build(), 500);
-    }
   } catch (err) {
     console.error(err);
     scheduleDate.textContent = "Error loading file";
@@ -1578,11 +1604,6 @@ function loadSourceSheet() {
   sourceClearBtn.disabled = false;
 
   setSourceStatus(`Source loaded (${sourceRecords.length} rows).`);
-  
-  // Rebuild schedule to show pack type calculations
-  if (workbook && daySelect.value) {
-    setTimeout(() => build(), 100);
-  }
 }
 
 function runSourceSearch() {
@@ -1611,9 +1632,10 @@ btnPrint.addEventListener("click", () => { if (cleanRows.length) window.print();
 const btnClearPicked = $("btnClearPicked");
 btnClearPicked.addEventListener("click", () => {
   if (!workbook || !daySelect.value) return;
-  if (!confirm("Clear all picked labels for this schedule? This cannot be undone.")) return;
   
   const dayName = daySelect.value;
+  const formattedDate = formatScheduleDate(dayName);
+  if (!confirm(`Clear all picked labels for ${formattedDate}?\n\nThis will only clear picks for this day. Other days' picks will remain saved.\n\nThis cannot be undone.`)) return;
   
   // Clear all picked status for this day using the same row structure
   // We need to use the actual cleanRows that are currently displayed
@@ -1621,6 +1643,7 @@ btnClearPicked.addEventListener("click", () => {
     for (const row of cleanRows) {
       setPicked(dayName, row, "bottle", false);
       setPicked(dayName, row, "box", false);
+      setPicked(dayName, row, "haz", false);
     }
   } else {
     // Fallback: rebuild rows if cleanRows not available
@@ -1630,6 +1653,7 @@ btnClearPicked.addEventListener("click", () => {
     for (const row of rows) {
       setPicked(dayName, row, "bottle", false);
       setPicked(dayName, row, "box", false);
+      setPicked(dayName, row, "haz", false);
     }
   }
   
