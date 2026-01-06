@@ -6,7 +6,8 @@
   <title>Production Schedule</title>
   <link rel="icon" type="image/png" href="IMG_0274.png">
   <link rel="apple-touch-icon" href="IMG_0274.png">
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Google Identity Services (OAuth for @maintex.com) -->
+  <script src="https://accounts.google.com/gsi/client" async defer onload="window.__gisLoaded && window.__gisLoaded()"></script>
   <style>
     :root{
       --bg:#f5f7fa;
@@ -567,6 +568,10 @@
     <select id="daySelect" disabled></select>
     <button id="btnPrint" disabled>Print</button>
     <button id="btnClearPicked" disabled style="background:#dc2626;border-color:#dc2626;">Clear All Picked</button>
+    <div style="flex:1"></div>
+    <span class="small" id="authStatus" style="min-width:240px;text-align:right;">Sign in required.</span>
+    <button id="btnSignIn" title="Sign in with your @maintex.com account">Sign in</button>
+    <button id="btnSignOut" disabled style="background:white;color:var(--accent);border-color:var(--border);">Sign out</button>
   </div>
 
   <div class="panel schedule-panel">
@@ -675,22 +680,36 @@
 </main>
 
 <script>
-// XLSX workbook to load (must be served alongside this page).
-// Note: the actual filename contains spaces, so we URI-encode it for fetch().
-const XLSX_FILE_PATH = encodeURI("Production Schedule Q1-Q2 2026.xlsx");
+/* =========================
+   CONFIG (required)
+   =========================
+   1) Create a Google Cloud OAuth Client ID (Web).
+   2) Set OAuth consent screen to "Internal" (maintex.com).
+   3) Enable "Google Sheets API".
+   4) Share the schedule spreadsheet to your org (maintex.com) (or a group).
+*/
+const GOOGLE_HOSTED_DOMAIN = "maintex.com";
+const GOOGLE_OAUTH_CLIENT_ID = "REPLACE_ME.apps.googleusercontent.com";
+const GOOGLE_SHEETS_SPREADSHEET_ID = "REPLACE_ME"; // From the sheet URL: https://docs.google.com/spreadsheets/d/<ID>/edit
+const GOOGLE_SHEETS_SCOPES = "https://www.googleapis.com/auth/spreadsheets.readonly";
 
 // State
-let workbook = null;
+let accessToken = null;
+let tokenClient = null;
 let allSheetNames = [];
 let sheetNames = []; // schedule day sheets only (for dropdown)
 let cleanRows = [];
 let sourceRecords = [];
 let sourceReady = false;
+const sheetAoaCache = new Map(); // sheetName -> AOA
 
 // DOM
 const $ = (id) => document.getElementById(id);
 const daySelect = $("daySelect");
 const btnPrint = $("btnPrint");
+const btnSignIn = $("btnSignIn");
+const btnSignOut = $("btnSignOut");
+const authStatus = $("authStatus");
 const scheduleDate = $("scheduleDate");
 const shiftBadge = $("shiftBadge");
 const cleanTable = $("cleanTable");
@@ -699,6 +718,76 @@ const sourceSearchBtn = $("sourceSearchBtn");
 const sourceClearBtn = $("sourceClearBtn");
 const sourceResultsTable = $("sourceResultsTable");
 const sourceSearchStatus = $("sourceSearchStatus");
+
+function setAuthStatus(msg) {
+  if (!authStatus) return;
+  authStatus.textContent = msg || "";
+}
+
+function isConfigured() {
+  return (
+    GOOGLE_OAUTH_CLIENT_ID &&
+    GOOGLE_OAUTH_CLIENT_ID !== "REPLACE_ME.apps.googleusercontent.com" &&
+    GOOGLE_SHEETS_SPREADSHEET_ID &&
+    GOOGLE_SHEETS_SPREADSHEET_ID !== "REPLACE_ME"
+  );
+}
+
+function setUiSignedOut(reason) {
+  setAuthStatus(reason || "Sign in required.");
+  btnSignIn.disabled = !isConfigured();
+  btnSignOut.disabled = true;
+  daySelect.disabled = true;
+  btnPrint.disabled = true;
+  $("btnClearPicked").disabled = true;
+  sourceSearch.disabled = true;
+  sourceSearchBtn.disabled = true;
+  sourceClearBtn.disabled = true;
+}
+
+function setUiSignedIn() {
+  setAuthStatus("Signed in. Loading schedule…");
+  btnSignIn.disabled = true;
+  btnSignOut.disabled = false;
+}
+
+async function sheetsFetchJson(url) {
+  if (!accessToken) throw new Error("Not signed in.");
+  const resp = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store"
+  });
+  if (resp.status === 401) {
+    // Token expired/revoked
+    accessToken = null;
+    setUiSignedOut("Session expired. Please sign in again.");
+    throw new Error("Unauthorized (token expired).");
+  }
+  if (!resp.ok) throw new Error(`Sheets API error: HTTP ${resp.status}`);
+  return await resp.json();
+}
+
+async function loadSpreadsheetSheetNames() {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(GOOGLE_SHEETS_SPREADSHEET_ID)}?fields=sheets(properties(title))`;
+  const json = await sheetsFetchJson(url);
+  const titles = (json.sheets || [])
+    .map(s => s?.properties?.title)
+    .filter(Boolean)
+    .map(String);
+  allSheetNames = titles;
+  // Only include schedule day sheets (e.g. "01-05" and "01-05 PM")
+  sheetNames = allSheetNames.filter((n) => /^\s*\d{1,2}-\d{1,2}/.test(String(n)));
+}
+
+async function fetchSheetAoa(sheetName) {
+  if (sheetAoaCache.has(sheetName)) return sheetAoaCache.get(sheetName);
+  const range = encodeURIComponent(sheetName);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(GOOGLE_SHEETS_SPREADSHEET_ID)}/values/${range}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
+  const json = await sheetsFetchJson(url);
+  const values = Array.isArray(json.values) ? json.values : [];
+  sheetAoaCache.set(sheetName, values);
+  return values;
+}
 
 // Helpers
 function normalizeHeader(s) {
@@ -1347,8 +1436,7 @@ function buildCleanRows(dayRows) {
 }
 
 function sheetToAoa(name) {
-  const ws = workbook.Sheets[name];
-  return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+  return fetchSheetAoa(name);
 }
 
 // Populate day sheet select and auto-select
@@ -1382,11 +1470,11 @@ function populateSheetSelects() {
 }
 
 // Build clean table
-function build() {
-  if (!workbook) return;
+async function build() {
+  if (!accessToken) return;
 
   const dayName = daySelect.value;
-  const dayAoa = sheetToAoa(dayName);
+  const dayAoa = await sheetToAoa(dayName);
 
   const dayRows = extractDayRows(dayAoa);
   cleanRows = buildCleanRows(dayRows);
@@ -1409,31 +1497,26 @@ function build() {
   btnClearPicked.disabled = cleanRows.length === 0;
 }
 
-// Load XLSX file automatically
-async function loadWorkbook() {
+async function loadScheduleAfterAuth() {
   try {
-    const response = await fetch(XLSX_FILE_PATH);
-    if (!response.ok) throw new Error(`Failed to load file: ${response.statusText}`);
-    
-    const buf = await response.arrayBuffer();
-    workbook = XLSX.read(buf, { type: "array" });
-    // Only include schedule day sheets (e.g. "01-05" and "01-05 PM")
-    allSheetNames = workbook.SheetNames || [];
-    sheetNames = allSheetNames.filter((n) => /^\s*\d{1,2}-\d{1,2}/.test(String(n)));
-
+    await loadSpreadsheetSheetNames();
+    if (!sheetNames.length) {
+      throw new Error("No day schedule tabs found (expected tabs like 01-05 or 01-05 PM).");
+    }
     populateSheetSelects();
     daySelect.disabled = false;
-    
+
     // Load Source sheet for search
-    loadSourceSheet();
+    await loadSourceSheet();
 
     // Auto-build on load
-    build();
+    await build();
+    setAuthStatus("Signed in.");
   } catch (err) {
     console.error(err);
-    scheduleDate.textContent = "Error loading file";
+    scheduleDate.textContent = "Unable to load schedule";
     shiftBadge.textContent = "—";
-    alert(`Error loading file: ${err.message}. Make sure "${XLSX_FILE_PATH}" exists in the same directory.`);
+    setAuthStatus(`Error: ${err.message}`);
   }
 }
 
@@ -1493,13 +1576,13 @@ function normalizeHaz(value) {
   return s;
 }
 
-function loadSourceSheet() {
+async function loadSourceSheet() {
   sourceReady = false;
   sourceRecords = [];
   renderSourceResults([]);
 
-  if (!workbook) {
-    setSourceStatus("Source: workbook not loaded.");
+  if (!accessToken) {
+    setSourceStatus("Source: sign in required.");
     return;
   }
 
@@ -1507,7 +1590,7 @@ function loadSourceSheet() {
     allSheetNames.find(n => norm(n) === "source") ||
     pickSheetByNameLike(allSheetNames, "source");
 
-  if (!sourceName || !workbook.Sheets[sourceName]) {
+  if (!sourceName) {
     setSourceStatus('Source sheet not found (expected a tab named "Source").');
     sourceSearch.disabled = true;
     sourceSearchBtn.disabled = true;
@@ -1515,9 +1598,8 @@ function loadSourceSheet() {
     return;
   }
 
-  const ws = workbook.Sheets[sourceName];
   // Use AOA so we can detect header row even if it's not row 1 (Source has a title block).
-  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true });
+  const aoa = await fetchSheetAoa(sourceName);
   if (!aoa.length) {
     setSourceStatus('Source sheet is empty.');
     sourceSearch.disabled = false;
@@ -1664,7 +1746,7 @@ function runSourceSearch() {
 
 // Event listeners
 daySelect.addEventListener("change", () => {
-  if (!workbook) return;
+  if (!accessToken) return;
   build(); // Auto-build when day sheet changes
 });
 
@@ -1672,7 +1754,7 @@ btnPrint.addEventListener("click", () => { if (cleanRows.length) window.print();
 
 const btnClearPicked = $("btnClearPicked");
 btnClearPicked.addEventListener("click", () => {
-  if (!workbook || !daySelect.value) return;
+  if (!accessToken || !daySelect.value) return;
   
   const dayName = daySelect.value;
   const formattedDate = formatScheduleDate(dayName);
@@ -1688,14 +1770,19 @@ btnClearPicked.addEventListener("click", () => {
     }
   } else {
     // Fallback: rebuild rows if cleanRows not available
-    const dayAoa = sheetToAoa(dayName);
-    const dayRows = extractDayRows(dayAoa);
-    const rows = buildCleanRows(dayRows);
-    for (const row of rows) {
-      setPicked(dayName, row, "bottle", false);
-      setPicked(dayName, row, "box", false);
-      setPicked(dayName, row, "haz", false);
-    }
+    (async () => {
+      const dayAoa = await sheetToAoa(dayName);
+      const dayRows = extractDayRows(dayAoa);
+      const rows = buildCleanRows(dayRows);
+      for (const row of rows) {
+        setPicked(dayName, row, "bottle", false);
+        setPicked(dayName, row, "box", false);
+        setPicked(dayName, row, "haz", false);
+      }
+      // Rebuild to refresh display
+      await build();
+    })();
+    return;
   }
   
   // Rebuild to refresh display
@@ -1712,8 +1799,73 @@ sourceClearBtn.addEventListener("click", () => {
   sourceSearch.focus();
 });
 
-// Initialize
-loadWorkbook();
+function initGoogleAuth() {
+  if (!isConfigured()) {
+    setUiSignedOut("Missing configuration. Set GOOGLE_OAUTH_CLIENT_ID + GOOGLE_SHEETS_SPREADSHEET_ID.");
+    return;
+  }
+
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_OAUTH_CLIENT_ID,
+    scope: GOOGLE_SHEETS_SCOPES,
+    hosted_domain: GOOGLE_HOSTED_DOMAIN,
+    callback: () => {}
+  });
+
+  // Try a non-interactive token request to restore session if possible.
+  requestAccessToken(false);
+}
+
+function requestAccessToken(interactive) {
+  if (!tokenClient) return;
+  tokenClient.callback = async (resp) => {
+    if (resp?.error) {
+      console.error(resp);
+      setUiSignedOut("Sign in required.");
+      return;
+    }
+    accessToken = resp.access_token;
+    setUiSignedIn();
+    await loadScheduleAfterAuth();
+  };
+
+  try {
+    tokenClient.requestAccessToken({ prompt: interactive ? "consent" : "" });
+  } catch (e) {
+    console.error(e);
+    setUiSignedOut("Unable to start sign-in flow.");
+  }
+}
+
+async function signOut() {
+  const t = accessToken;
+  accessToken = null;
+  sheetAoaCache.clear();
+  allSheetNames = [];
+  sheetNames = [];
+  daySelect.innerHTML = "";
+  scheduleDate.textContent = "—";
+  shiftBadge.textContent = "—";
+  renderCleanRows([], "");
+  renderSourceResults([]);
+  setSourceStatus("Sign in required.");
+  setUiSignedOut("Signed out.");
+
+  if (t && window.google?.accounts?.oauth2?.revoke) {
+    try {
+      google.accounts.oauth2.revoke(t, () => {});
+    } catch {
+      // ignore
+    }
+  }
+}
+
+btnSignIn.addEventListener("click", () => requestAccessToken(true));
+btnSignOut.addEventListener("click", () => signOut());
+
+// Initialize (GIS script calls this when loaded)
+window.__gisLoaded = () => initGoogleAuth();
+setUiSignedOut("Sign in required.");
 </script>
 </body>
 </html>
