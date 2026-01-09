@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="IMG_0274.png">
   <link rel="apple-touch-icon" href="IMG_0274.png">
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="uom_conversions.js"></script>
   <style>
     :root{
       --bg:#f5f7fa;
@@ -585,7 +586,7 @@
       <h3>📋 Label Picking Instructions</h3>
       <ul>
         <li><strong>Tap</strong> the label location to mark it as picked (turns green)</li>
-        <li><strong>Bottle Labels:</strong> Multiply case quantity by pack type (shown below each order)</li>
+        <li><strong>Bottle Labels:</strong> Quantity needed is shown below each order</li>
         <li><strong>Haz Labels:</strong> Pick if Haz Info is shown (corrosive label)</li>
         <li><strong>Progress:</strong> Track your progress with the summary above</li>
         <li><strong>Search:</strong> Use "Search Source" below to find label locations for rollover items</li>
@@ -912,105 +913,12 @@ function findTodaySheet(names) {
   return null;
 }
 
-// Extract pack type (bottles per case) from description only
-// Patterns: "4PK", "4/64oz", "4/64 oz", "6/cs", "2PK", "4/1", "4/64", etc.
-function extractBottlesPerCase(description) {
-  if (!description) return null;
-  const desc = String(description).trim();
-  
-  // Pattern 1: XPK (e.g., "4PK", "2PK", "12PK") - X bottles per case
-  // Also match "4 PK" with space
-  const pkMatch = desc.match(/(\d+)\s*PK/i);
-  if (pkMatch) {
-    return parseInt(pkMatch[1], 10);
-  }
-  
-  // Pattern 2: X/cs or X/CS or X/CS or X per case (e.g., "6/cs", "4/CS", "4 per case")
-  const csMatch = desc.match(/(\d+)\s*\/\s*cs/i) || desc.match(/(\d+)\s+per\s+case/i);
-  if (csMatch) {
-    return parseInt(csMatch[1], 10);
-  }
-  
-  // Pattern 3: X/Yoz or X/Y oz (e.g., "4/64oz", "4/64 oz", "2/32oz", "4/64OZ", "4-64oz")
-  // This means X bottles per case, Y is the bottle size in oz
-  // Also match with dash: "4-64oz"
-  const ozMatch = desc.match(/(\d+)\s*[-\/]\s*(\d+)\s*(oz|OZ|fl\s*oz|ml|liter|gal|gallon)/i);
-  if (ozMatch) {
-    const num = parseInt(ozMatch[1], 10);
-    if (num >= 1 && num <= 24) return num;
-  }
-  
-  // Pattern 4: X/Y where Y is a number (could be size or cases)
-  // Try to be smart: if Y >= 8, likely a size (e.g., "4/64" = 4 bottles of 64oz)
-  // If Y = 1, it's X/1 CS format = X bottles per case
-  // Also match with dash: "4-64"
-  const numMatch = desc.match(/(\d+)\s*[-\/]\s*(\d+)(?!\s*(oz|OZ|fl|ml|liter|gal|gallon|cs|pk|PK|per))/i);
-  if (numMatch) {
-    const first = parseInt(numMatch[1], 10);
-    const second = parseInt(numMatch[2], 10);
-    
-    // If second number is 1, it's X/1 CS format = X bottles per case
-    if (second === 1 && first >= 1 && first <= 24) {
-      return first;
-    }
-    
-    // If second number is >= 8, likely a size (e.g., "4/64" = 4 bottles of 64oz per case)
-    // Common sizes: 8oz, 16oz, 32oz, 64oz, 128oz, etc.
-    if (second >= 8 && first >= 1 && first <= 24) {
-      return first;
-    }
-    
-    // If first is 1-12 and second is 2-7, check context
-    // If no "case" or "cs" context, likely size format
-    if (first >= 1 && first <= 12 && second >= 2 && second <= 7) {
-      const context = desc.toLowerCase();
-      // If there's no case/cs/pack context, treat as size (e.g., "4/32" = 4 bottles of 32oz)
-      if (!context.includes('case') && !context.includes('cs') && !context.includes('pack')) {
-        return first;
-      }
-    }
-  }
-  
-  // Pattern 5: Look for common pack type indicators in the description
-  // e.g., "4 pack", "6 pack", "12 pack" (though these are usually consumer packs)
-  // But also "4/1", "6/1" might appear as "4-1" or "4 1"
-  const packMatch = desc.match(/(\d+)\s*[- ]\s*1\s*(?:cs|case|pack)/i) || 
-                    desc.match(/(\d+)\s*\/\s*1\s*(?:cs|case|pack)/i);
-  if (packMatch) {
-    return parseInt(packMatch[1], 10);
-  }
-  
-  // Pattern 6: Just a number followed by certain keywords (e.g., "4 bottles", "6 per")
-  // This is less reliable, so we'll be conservative
-  const bottleMatch = desc.match(/(\d+)\s+(?:bottles?|per)/i);
-  if (bottleMatch) {
-    const num = parseInt(bottleMatch[1], 10);
-    // Only accept if it's a reasonable number (1-24)
-    if (num >= 1 && num <= 24) {
-      return num;
-    }
-  }
-  
-  return null;
-}
-
-// Calculate bottle label quantity from description only
-function calculateBottleLabels(caseQty, description) {
-  if (!caseQty || !description) return null;
-  
-  const bottlesPerCase = extractBottlesPerCase(description);
-  
-  // Debug: log when we can't find pack type (temporary for troubleshooting)
-  if (!bottlesPerCase && caseQty && String(description).trim()) {
-    console.log('⚠ No pack type found for:', description, '| Case Qty:', caseQty);
-  }
-  
-  if (!bottlesPerCase) return null;
-  
-  const caseNum = typeof caseQty === 'number' ? caseQty : parseFloat(String(caseQty).replace(/,/g, ''));
-  if (!isFinite(caseNum)) return null;
-  
-  return caseNum * bottlesPerCase;
+// Calculate label quantity using the conversion table in uom_conversions.js (authoritative).
+function calculateBottleLabels(orderedQty, sku, uom) {
+  if (!orderedQty || !sku || !uom) return null;
+  if (typeof window.getBottleLabelsNeededFromConversions !== "function") return null;
+  const out = window.getBottleLabelsNeededFromConversions(sku, uom, orderedQty);
+  return out ? out.labelsNeeded : null;
 }
 
 // Update progress summary
@@ -1118,13 +1026,19 @@ function renderCleanRows(rows, dayName) {
       const ordText = ord ? (uom ? `${ord} ${uom}` : ord) : "";
       tdOrd.textContent = ordText;
       
-      // Add bottle label calculation from description only
-      const bottleQty = calculateBottleLabels(ordNum, row.Description);
-      if (bottleQty && uom === "CS") {
+      // Add bottle label calculation from conversion table (SKU + UOM → labels)
+      const bottleQty = calculateBottleLabels(ordNum, row["SKU#"], uom);
+      if (bottleQty != null) {
         const calcDiv = document.createElement("div");
         calcDiv.className = "bottle-qty-calc";
         calcDiv.innerHTML = `<strong>${bottleQty}</strong> bottle labels needed`;
         tdOrd.appendChild(calcDiv);
+      } else if (ordNum != null && isFinite(ordNum) && row["SKU#"] && uom) {
+        const missingDiv = document.createElement("div");
+        missingDiv.className = "bottle-qty-calc";
+        missingDiv.innerHTML = `<strong>Missing conversion</strong> for ${String(row["SKU#"]).trim()} (${uom})`;
+        tdOrd.appendChild(missingDiv);
+        console.warn("Missing label conversion:", { sku: row["SKU#"], uom, orderedQty: ordNum, description: row.Description });
       }
       tr.appendChild(tdOrd);
 

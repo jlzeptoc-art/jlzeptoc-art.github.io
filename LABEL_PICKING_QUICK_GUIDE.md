@@ -30,7 +30,7 @@
   - Use the **Label Location / Box Label Location** shown in results
 
 ### If something looks wrong
-- **No bottle calculation shown**: the pack type may not be recognizable from the description—use **Search Source** to confirm pack type.
+- **No bottle calculation shown**: the SKU/unit conversion may be missing—tell your supervisor so it can be added to the conversion table (`uom_conversions.js`). Use **Search Source** to confirm pack type if needed.
 - **Schedule won’t load**: refresh the page; verify Wi‑Fi; if still down, use paper backup for that shift.
 
 ### Reset options
