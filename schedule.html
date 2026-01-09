@@ -430,7 +430,6 @@
       .picking-instructions{display:none !important}
       .progress-summary{display:none !important}
       .help-icon{display:none !important}
-      .bottle-qty-calc{display:none !important}
       .haz-badge{display:none !important}
       main{
         padding:0;
@@ -524,6 +523,18 @@
         color:#111827;
         padding:6px 8px;
         font-size:11px;
+      }
+      /* Show bottle label quantity under Ordered QTY when printing */
+      .bottle-qty-calc{
+        display:block !important;
+        margin-top:2px !important;
+        font-size:10px !important;
+        color:#374151 !important;
+        font-style:italic;
+      }
+      .bottle-qty-calc strong{
+        color:#111827 !important;
+        font-weight:700;
       }
       /* Keep print identical to pre-highlight look */
       .label-pickable{
