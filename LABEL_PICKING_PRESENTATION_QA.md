@@ -28,7 +28,7 @@
 - **Answer**: Two ways: select the correct day from the dropdown, and use **Search Source** to look up label locations by item #/description. This is faster than hunting paper schedules.
 
 ### 10) “What if the bottle label calculation is wrong?”
-- **Answer**: The system calculates from the description pattern, and we validate in the pilot. If a product format doesn’t match a pattern, we’ll improve the recognition rules or reference the pack type from Source. Worst case: it shows no calculation and the associate confirms using Source (same as today).
+- **Answer**: The system calculates from a SKU/unit conversion table (manual, controlled). We validate it in the pilot. If a SKU is missing, it will clearly show “Missing conversion” and the associate confirms using Source (same as today) until we add the conversion.
 
 ### 11) “How do we measure success in a week?”
 - **Answer**: Track three metrics: **pick completion time**, **rework/errors**, and **printing/handling time**. If we see a meaningful reduction (target 20–30% improvement) and associates prefer it, we roll out.
