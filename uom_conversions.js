@@ -56,7 +56,7 @@ window.MAINTEX_LABEL_UOM_CONVERSIONS = {
   defaultLabelsPerUom: {
     EA: 1,
     PL: 1,
-    DR: 1,
+    DR: 2,
     // CS intentionally omitted (varies by product pack count)
   },
 
@@ -996,6 +996,8 @@ window.MAINTEX_LABEL_UOM_CONVERSIONS = {
     "1C95004": { name: "ULTRA GREEN HAND;SOAP 4/1CS", uom: { CS: 4 } },
     "1CND95004": { name: "NO DYE ULTRA GREEN H;SOAP 4/1 CS", uom: { CS: 4 } },
     "1CUS95004": { name: "ULTRA GREEN HAND;SOAP UNSCENTED 4/1CS", uom: { CS: 4 } },
+    "120232MTA": { name: "MTA BULLET HI;PERFORMANCE12/1C HIGH PE", uom: { CS: 12 } },
+    "120204MTA": { name: "MTA BULLET HIGH;PERFORMANCE4/1 HIGH PERF", uom: { CS: 12 } },
     // --- END AUTO-GENERATED ---
     // "EXAMPLE-SKU": { name: "Example Product", uom: { CS: 4 } },
   },
